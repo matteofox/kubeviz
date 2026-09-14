@@ -7,7 +7,6 @@ import os
 
 import numpy as np
 import pyqtgraph as pg
-from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (QApplication, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
                              QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QProgressBar,
                              QPushButton, QRadioButton, QSpinBox, QVBoxLayout)
@@ -278,6 +277,10 @@ right drag          : brightness / contrast
 wheel               : zoom in / out around the cursor
 middle drag, shift+left drag : pan
 """
+
+
+def help_python(parent=None) -> TextDialog:
+    return TextDialog("Python port notes", _doc_text("python_notes.txt"), parent)
 
 
 def help_shortcuts(parent=None) -> TextDialog:

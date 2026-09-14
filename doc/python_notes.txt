@@ -1,0 +1,78 @@
+                    *** KUBEVIZ PYTHON PORT: NOTES ***
+
+The Python version reproduces the IDL program (V2.2) routine by routine. This
+file lists what differs for the user. The IDL instructions (Help -> Instructions)
+remain valid for everything else.
+
+** Starting kubeviz **
+
+  kubeviz cube.fits --redshift 0.85 --lineset 1        interactive session
+  kubeviz cube.fits --redshift 0.85 --lineset 1 --batch --fit-all-lines
+  kubeviz session.kvz                                  reopen a saved session
+  kubeviz idl_session.sav                              import an IDL session (best effort)
+  kubeviz --demo                                       synthetic demo cube
+  kubeviz --help                                       all options
+
+Every IDL keyword is a command line flag with the same name (dashes instead of
+underscores are accepted): --noisefile, --ext, --noise-ext, --trim, --fluxfac,
+--smooth, --specsmooth, --transpose, --vacuum, --logarithmic, --waveunit,
+--redshift, --do-mc-errors, --bootstrap, --nmontecarlo, --plot-mc-pdf,
+--save-mc-pdf, --use-mc-noise, --lineset, --debug, --mask-sn-thresh,
+--mask-maxvelerr, --mom-thresh, --spmask, --instr, --band, --batch,
+--fit-all-lines, --fix-ratios, --resfile, --fittype, --outdir, --logfile,
+--fitpars, --momwindowfile, --gaussinitfile, --scalenoiseerr.
+
+** Windows **
+
+One main window holds the spaxel viewer (left), the spectrum viewer (top right)
+and the spectral zoom (bottom right, shown with Toggle Zoom). All three panels
+are resizable by dragging the separators. The linefit window is a separate
+window; if closed, reopen it with Options -> Show linefit window.
+
+** Mouse in the spaxel viewer **
+
+  left click / drag       move the crosshair, or paint / erase the spaxel mask
+  right drag              brightness and contrast (as in IDL)
+  mouse wheel             zoom in / out around the cursor (continuous)
+  middle drag             pan;  shift + left drag also pans
+  Reset view button       show the whole field again
+
+The integer zoom factor and the edge-click navigation of the IDL version are
+gone: zoom and pan are continuous.
+
+** Spectrum and zoom panels **
+
+Both plots are interactive: wheel zooms, drag pans, right drag zooms a box,
+"A" (bottom left of the plot) or a double click restores the automatic range.
+Left click sets the current wavelength. The zoom panel shows the pixel index
+on the top axis and the wavelength on the bottom axis. The fitted components
+are drawn in red (1st component / moments), blue (2nd component), the total
+model in dashed green; dotted blue lines mark the continuum windows.
+
+** Keyboard shortcuts **
+
+Identical to the IDL version (Help -> Keyboard shortcuts). "," and "." also
+step through wavelength planes (in addition to "<" and ">").
+
+** Files **
+
+  Results      *_res.fits and *_noflag.fits with the same plane layout and
+               header keywords as the IDL version; files can be exchanged.
+  Sessions     .kvz files (compressed Python pickles). IDL .sav sessions can be
+               opened read-only (File -> Load Session, or from the command
+               line); Monte Carlo cubes are regenerated on demand.
+  Images       "Save Image as PNG" replaces "Save Image as EPS".
+  MC plots     PNG files instead of EPS.
+
+Sessions saved automatically on quit (lastsession.kvz) and in batch mode do not
+store the Monte Carlo realisations; they are recreated when the session is
+reopened (MC1/2/3 use fixed random seeds, bootstrap cubes are re-read from the
+original file).
+
+** Numerical differences worth knowing **
+
+The fitter is scipy's bounded least-squares instead of MPFIT; results agree to
+numerical precision for well-behaved fits. A start value outside the user
+limits is clipped instead of aborting the fit. Random numbers are reproducible
+but not identical to IDL. The full list of deliberate differences is in
+PORTING.md in the repository.

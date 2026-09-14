@@ -57,6 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--momwindowfile", help="(beta) 2-plane cube with velocity centre/width for the moments window")
     p.add_argument("--gaussinitfile", help="(beta) cube of initial guesses for the Gaussian parameters")
     p.add_argument("--scalenoiseerr", action="store_true", help="rescale the formal errors to chi-square/dof = 1")
+    p.add_argument("--demo", action="store_true", help="generate a synthetic MUSE-like cube (z=0.02, Ha+[NII]) and open it")
     p.add_argument("--version", action="version", version=f"kubeviz {__version__}")
     return p
 
@@ -65,6 +66,13 @@ def main(argv=None) -> int:
     from .session import batchmode, start_session
 
     args = build_parser().parse_args(argv)
+    if args.demo:
+        from .session import make_demo_cube
+        args.datafile = make_demo_cube(args.outdir)
+        if args.redshift is None:
+            args.redshift = 0.02
+        if not args.lineset:
+            args.lineset = 1
     if args.datafile is None:
         try:
             from .gui.app import run_gui
@@ -73,7 +81,7 @@ def main(argv=None) -> int:
             return 2
         return run_gui(None, vars(args))
 
-    kwargs = {k: v for k, v in vars(args).items() if k not in ("datafile", "batch", "fit_all_lines")}
+    kwargs = {k: v for k, v in vars(args).items() if k not in ("datafile", "batch", "fit_all_lines", "demo")}
     if args.fitpars is not None and len(args.fitpars) not in (6, 8):
         print("[ ERROR ] --fitpars needs 6 or 8 values", file=sys.stderr)
         return 2

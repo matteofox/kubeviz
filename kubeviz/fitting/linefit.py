@@ -16,8 +16,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .. import utils
-from ..constants import (CKMS, ERR_NOISE, FIT_GAUSS, MODE_MASK, MODE_SPAXEL, NOT_FIT,
-                         SIGTOFWHM, SPEC_MEDSUB, SPEC_SLICE)
+from ..constants import CKMS, ERR_NOISE, FIT_GAUSS, MODE_SPAXEL, NOT_FIT, SPEC_MEDSUB, SPEC_SLICE
 from ..core.extraction import medianspec, spectrum_for_fit
 from ..linesdb import (FIXED_RATIOS, LINEFANCYNAMES, LINENAMES, LINES_REST, LINESET_MAX,
                        LINESETS, airtovac)
@@ -113,7 +112,7 @@ def chooselines(state, linesets, lines, lineset=None):
     return inspec
 
 
-def linefit_init(state) -> None:
+def linefit_init(state, reset_results: bool = True) -> None:
     """Identify the lines in the wavelength range, define linesets and bisectors,
     (re)create the result containers and the instrumental resolution."""
     from ..core.instrres import instrres_init
@@ -167,7 +166,8 @@ def linefit_init(state) -> None:
         utils.warn("Check the redshift value.")
 
     # results containers are recreated (lines may have changed)
-    state.reset_all_results()
+    if reset_results:
+        state.reset_all_results()
 
     if state.spaxselect is None or state.spaxselect.shape[1:] != (state.Nrow, state.Ncol):
         state.spaxselect = np.zeros((max(state.Nmask, 1), state.Nrow, state.Ncol))

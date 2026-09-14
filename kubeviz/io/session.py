@@ -54,6 +54,7 @@ def load_session(fname: str) -> State:
     return state
 
 
-def load_idl_session(fname: str) -> State:  # pragma: no cover - phase 4
-    raise NotImplementedError(
-        "Loading IDL .sav sessions is planned (best effort via scipy.io.readsav) but not implemented yet.")
+def load_idl_session(fname: str) -> State:
+    """Best-effort import of an IDL ``.sav`` session (see :mod:`kubeviz.io.idlsession`)."""
+    from .idlsession import load_idl_session as _load
+    return _load(fname)

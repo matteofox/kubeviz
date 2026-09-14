@@ -320,7 +320,6 @@ class LinefitWindow(QMainWindow):
         self.update_all(update_userpars=True)
 
     def _add_param_row(self, row, label, lt, par, comp_text, with_fit_show=True, is_cont=False):
-        st = self.state
         d = {}
         self.grid.addWidget(QLabel(label), row, 0)
         d["comp"] = QLabel(comp_text)

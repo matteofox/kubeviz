@@ -12,12 +12,11 @@ import os
 
 import numpy as np
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction, QActionGroup, QKeySequence
-from PyQt6.QtWidgets import (QApplication, QFileDialog, QMainWindow, QMessageBox, QSplitter,
-                             QWidget)
+from PyQt6.QtGui import QAction, QActionGroup
+from PyQt6.QtWidgets import QApplication, QFileDialog, QMainWindow, QMessageBox, QSplitter
 
 from .. import utils
-from ..constants import (CKMS, CUBE_BADPIX, CUBE_DATA, CUBE_LINEFIT, CUBE_LINEFIT_ERR, CUBE_LINEFIT_SN,
+from ..constants import (CUBE_BADPIX, CUBE_DATA, CUBE_LINEFIT, CUBE_LINEFIT_ERR, CUBE_LINEFIT_SN,
                          CUBE_NOISE, CUBE_SN, ERR_BOOTSTRAP, ERR_MC1, ERR_MC2, ERR_MC3, ERR_NOISE,
                          FIT_GAUSS, FIT_MOMENTS, IMG_MED1_MINUS_MED2, IMG_MED2_MINUS_MED1, IMG_MEDSUB1,
                          IMG_MEDSUB2, IMG_SLICE, MODE_MASK, MODE_SPAXEL, NOT_FIT, SPEC_MEDSUB,
@@ -164,9 +163,6 @@ class KubevizGUI(QMainWindow):
         self._add_menu(mb, "Zcut", [("HistEq", "HistEq"), ("Zscale", "Zscale"), ("MinMax", "MinMax"), ("99.5%", "99.5"), ("99%", "99.0"),
                                     ("97%", "97.0"), ("95%", "95.0"), None, ("User linear", "UserLin"), ("User sqrt", "UserSqrt"),
                                     ("User log10", "UserLog")], self.zcut_group)
-        self.actions["HistEq"].menu = None
-        zm = mb.findChildren(type(mb))  # noqa: F841 (keeps flake quiet)
-        self.zcut_menu = [m for m in self.menuBar().findChildren(QWidget) if False]
         mzc = self.menuBar().actions()[2].menu()
         mzc.addSeparator()
         a = QAction("User Parameters...", self)
@@ -201,7 +197,8 @@ class KubevizGUI(QMainWindow):
                                        ("Load Results File...", "LoadResultFile"), None, ("Show linefit window", "ShowLinefit")])
         for code in ("MonteCarloNoise", "MonteCarloPlot", "MonteCarloSave", "NoiseCubeErrScale"):
             self.actions[code].setCheckable(True)
-        self._add_menu(mb, "Help", [("What's new", "HelpWhatIsNew"), ("Instructions", "HelpInstructions"), ("Keyboard shortcuts", "HelpShortcuts")])
+        self._add_menu(mb, "Help", [("What's new", "HelpWhatIsNew"), ("Instructions", "HelpInstructions"),
+                                    ("Keyboard shortcuts", "HelpShortcuts"), ("Python port notes", "HelpPython")])
         self._sync_menu_checks()
 
     def _sync_menu_checks(self):
@@ -916,10 +913,14 @@ class KubevizGUI(QMainWindow):
                 save_session(st, fname)
             return
         if code == "LoadSession":
-            fname, _ = QFileDialog.getOpenFileName(self, "Load session file", st.cwdir, f"kubeviz session (*{SESSION_EXT})")
+            fname, _ = QFileDialog.getOpenFileName(self, "Load session file", st.cwdir,
+                                                   f"kubeviz session (*{SESSION_EXT} *.sav);;All files (*)")
             if fname:
                 try:
-                    self.replace_state(load_session(fname))
+                    from ..session import finish_loaded_session
+                    new = load_session(fname)
+                    finish_loaded_session(new)
+                    self.replace_state(new)
                 except Exception as exc:
                     QMessageBox.critical(self, "kubeviz", f"Could not load session:\n{exc}")
             return
@@ -929,7 +930,7 @@ class KubevizGUI(QMainWindow):
             return
         if code.startswith("Help"):
             {"HelpWhatIsNew": dialogs.help_whatsnew, "HelpInstructions": dialogs.help_instructions,
-             "HelpShortcuts": dialogs.help_shortcuts}[code](self).show()
+             "HelpShortcuts": dialogs.help_shortcuts, "HelpPython": dialogs.help_python}[code](self).show()
             return
 
         cubes = {"Data": CUBE_DATA, "Noise": CUBE_NOISE, "BadPixels": CUBE_BADPIX, "SN": CUBE_SN, "Linefit": CUBE_LINEFIT,
@@ -1093,6 +1094,7 @@ class KubevizGUI(QMainWindow):
                     utils.warn("No bootstrap file selected")
                     return False
                 st.domontecarlo = ERR_BOOTSTRAP
+                st.bootstrap_file = fname
                 readbootstrapcubes(st, os.path.basename(fname), os.path.dirname(fname))
                 if st.domontecarlo != ERR_BOOTSTRAP:
                     return False

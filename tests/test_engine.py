@@ -1,7 +1,6 @@
 import os
 
 import numpy as np
-import pytest
 from astropy.io import fits
 
 from kubeviz import constants as C
@@ -9,7 +8,7 @@ from kubeviz.core.extraction import medianspec, medsum_image_update
 from kubeviz.core.masks import newmask, select_spaxels
 from kubeviz.fitting.fitall import fitadjall, fitall
 from kubeviz.fitting.flags import autoflag
-from kubeviz.fitting.linefit import dofit, getredshift, linefit_init
+from kubeviz.fitting.linefit import dofit, getredshift
 from kubeviz.io.cube import decode_trimstr
 from kubeviz.io.results import loadres, saveres
 from kubeviz.io.session import load_session, save_session

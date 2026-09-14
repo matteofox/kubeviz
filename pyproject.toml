@@ -26,6 +26,7 @@ test = ["pytest>=7"]
 
 [project.scripts]
 kubeviz = "kubeviz.cli:main"
+kubeviz-compare = "kubeviz.compare:main"
 
 [tool.setuptools.packages.find]
 include = ["kubeviz*"]

@@ -38,6 +38,10 @@ drag changes contrast, wheel zooms, middle drag (or shift + left drag) pans. Key
 shortcuts are those of the IDL version (Help -> Keyboard shortcuts).
 
 Every keyword of the IDL procedure is available as a command line flag (`kubeviz --help`).
+`kubeviz --demo` generates a synthetic cube and opens it. `kubeviz-compare a_res.fits b_res.fits`
+compares two results files plane by plane (for the IDL vs Python parity check). IDL `.sav`
+sessions can be opened directly (best effort). See `doc/python_notes.txt` (also under Help ->
+Python port notes) for the differences with the IDL version and `CHANGELOG.md`.
 Results files use the same plane layout and header keywords as the IDL version, so they can be
 exchanged between the two implementations. Python sessions are saved as `.kvz` files.
 

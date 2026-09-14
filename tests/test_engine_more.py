@@ -4,9 +4,7 @@ import numpy as np
 from astropy.io import fits
 
 from kubeviz import constants as C
-from kubeviz.core.extraction import medianspec
-from kubeviz.core.instrres import linefit_skylines
-from kubeviz.core.masks import load_mask, optimal_mask, save_mask, select_spaxels
+from kubeviz.core.masks import optimal_mask, save_mask, select_spaxels
 from kubeviz.fitting.fitall import fitadj, fitall
 from kubeviz.fitting.flags import autoflag
 from kubeviz.fitting.linefit import dofit, linefit_reset, linefit_resetuser

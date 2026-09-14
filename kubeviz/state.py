@@ -18,7 +18,7 @@ from . import __version__
 from .constants import (CKMS, ERR_BOOTSTRAP, ERR_MC1, ERR_MC2, ERR_MC3, ERR_NOISE,
                         FIT_GAUSS, INSTRRES_EXTPOLY, INSTRRES_TEMPLATE, INSTRRES_VARPOLY,
                         MAX_POLYCOEFF_INSTRRES, MAXLINES, MODE_MASK, MODE_SPAXEL,
-                        MONTECARLO_PERCS, N_MONTECARLO_PERCS, NOT_FIT, SIGTOFWHM)
+                        MONTECARLO_PERCS, NOT_FIT, SIGTOFWHM)
 from .linesdb import airtovac, mainline_rest
 from .results import ResultSet
 
@@ -79,6 +79,7 @@ class State:
     scaleNoiseerrors: bool = False
 
     Nbootstrap: int = 0
+    bootstrap_file: str = ""                       # path of the bootstrap cubes file
     inbootstrapcubes: Optional[np.ndarray] = None   # (Nboot, Nw, Nrow, Ncol) unsmoothed
     bootstrapcubes: Optional[np.ndarray] = None
     bootstrapnoise: Optional[np.ndarray] = None

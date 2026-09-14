@@ -51,9 +51,7 @@ def start_session(datafile: str | None, noisefile=None, ext=None, noise_ext=None
 
     if datafile.lower().endswith((".sav", SESSION_EXT)):
         state = load_session(datafile)
-        state.cwdir = os.getcwd() + os.sep
-        if not os.path.isdir(state.outdir or ""):
-            state.outdir = state.cwdir
+        finish_loaded_session(state)
         if spmask:
             load_mask(state, spmask)
         return state
@@ -83,6 +81,7 @@ def start_session(datafile: str | None, noisefile=None, ext=None, noise_ext=None
             else:
                 state.domontecarlo = ERR_BOOTSTRAP
                 bootstrap_path = bdir if bdir else datadir
+                state.bootstrap_file = os.path.join(bootstrap_path, bname)
         elif do_mc_errors in (ERR_MC1, ERR_MC2, ERR_MC3):
             state.domontecarlo = do_mc_errors
             n = int(nmontecarlo) if nmontecarlo is not None else 100
@@ -159,6 +158,54 @@ def start_session(datafile: str | None, noisefile=None, ext=None, noise_ext=None
     if res_path is not None:
         loadres(state, res_path)
     return state
+
+
+def finish_loaded_session(state: State) -> None:
+    """Fix paths of a loaded session and regenerate what a light session dropped."""
+    state.cwdir = os.getcwd() + os.sep
+    if not os.path.isdir(state.outdir or ""):
+        state.outdir = state.cwdir
+    if state.noise is None:
+        state.noise = state.noisecube
+    restore_montecarlo(state)
+
+
+def restore_montecarlo(state: State) -> None:
+    """Recreate the Monte Carlo / bootstrap realisations of a session saved without
+    them. MC1/2/3 are deterministic (fixed seeds); bootstrap cubes are re-read from
+    ``state.bootstrap_file``. Falls back to noise-cube errors when impossible."""
+    if state.domontecarlo == ERR_NOISE or state.montecarlocubes is not None:
+        return
+    utils.info(f"Regenerating {ERR_METHOD_NAMES[state.domontecarlo]} realisations for the loaded session...")
+    if state.domontecarlo == ERR_BOOTSTRAP:
+        if state.bootstrap_file and os.path.exists(state.bootstrap_file):
+            readbootstrapcubes(state, os.path.basename(state.bootstrap_file), os.path.dirname(state.bootstrap_file))
+        else:
+            utils.warn("Bootstrap file not available: switching to Noise Cube errors.")
+            state.domontecarlo = ERR_NOISE
+            state.noise = state.noisecube
+            return
+    elif state.domontecarlo == ERR_MC1:
+        createmc1cubes(state)
+    elif state.domontecarlo == ERR_MC2:
+        createmc2cubes(state)
+    elif state.domontecarlo == ERR_MC3:
+        createmc3cubes(state)
+    setupmontecarlocubes(state)
+
+
+def make_demo_cube(outdir: str | None = None, **kw) -> str:
+    """Write a synthetic demo cube and return its path (``kubeviz --demo``)."""
+    from .synth import make_synthetic_cube
+    outdir = outdir or os.getcwd()
+    os.makedirs(outdir, exist_ok=True)
+    fname = os.path.join(outdir, "kubeviz_demo_cube.fits")
+    opts = dict(nx=40, ny=32, redshift=0.02, nan_corner=True)
+    opts.update(kw)
+    make_synthetic_cube(fname, **opts)
+    utils.setup_logging()
+    utils.info(f"Synthetic demo cube written to {fname} (redshift 0.02, Halpha + [NII], MUSE-like)")
+    return fname
 
 
 def batchmode(state: State, redshift=None, fit_all_lines: bool = False, lineset=None):
