@@ -78,7 +78,8 @@ def fit_overlays(state, xx) -> list[Overlay]:
     with np.errstate(all="ignore"), warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         contmed = np.nanmedian(cont, axis=1)
-    contmed[~np.isfinite(contmed)] = 0.0
+    infit = np.isfinite(contmed)          # inside at least one lineset fit window
+    contmed[~infit] = 0.0
     totfit += contmed
 
     if gauss:
@@ -88,7 +89,7 @@ def fit_overlays(state, xx) -> list[Overlay]:
                 g = _gauss(state, xx, state.lines[line], res[1], res[2], fluxes[line])
                 totfit += g
                 if np.sum(g) > 0:
-                    y = g + np.nan_to_num(cont[:, ls]) if state.cshow[line] == 1 else g
+                    y = g + cont[:, ls] if state.cshow[line] == 1 else g
                     out.append(Overlay(kind, xx, y))
     else:
         for line in mshow:
@@ -96,9 +97,10 @@ def fit_overlays(state, xx) -> list[Overlay]:
             g = _gauss(state, xx, state.lines[line], m[6 * line + 1], m[6 * line + 2], mfit[line])
             totfit += g
             if np.sum(g) > 0:
-                y = g + np.nan_to_num(cont[:, ls]) if state.cshow[line] == 1 else g
+                y = g + cont[:, ls] if state.cshow[line] == 1 else g
                 out.append(Overlay("moment", xx, y))
-    ok = np.abs(totfit) > 1e-30
-    if np.any(ok):
-        out.append(Overlay("total", xx[ok], totfit[ok]))
+    # the total model is drawn only inside the fit windows (NaN elsewhere breaks the curve)
+    totfit = np.where(infit, totfit, np.nan)
+    if np.any(infit):
+        out.append(Overlay("total", xx, totfit))
     return out

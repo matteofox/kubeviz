@@ -1,29 +1,37 @@
-"""Spaxel viewer widget: the image with crosshair and mask overlay, colour bar,
-wavelength slider and info panel (the ``base1`` window of the IDL code).
+"""Spaxel viewer panel: toolbar, image with an attached interactive colour bar,
+wavelength slider and a one-line info strip.
 
-Interaction (modernised): mouse wheel zooms around the cursor, middle-drag (or
-Shift + left drag) pans, "Reset view" restores the full field. Left click/drag
-moves the crosshair or paints the spaxel mask, right-drag changes brightness and
-contrast as in the IDL version.
+Interaction: left click/drag moves the crosshair or paints the spaxel mask, right-drag
+changes brightness/contrast, the wheel zooms around the cursor, middle-drag (or
+shift + left drag) pans. Dragging the colour bar handles sets user linear cuts.
 """
 from __future__ import annotations
 
 import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QPainterPath, QPen
-from PyQt6.QtWidgets import (QGridLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout,
-                             QWidget)
+from PyQt6.QtGui import QColor, QFont, QPainterPath, QPen
+from PyQt6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QPushButton, QSlider, QToolButton,
+                             QVBoxLayout, QWidget)
+
+from ..constants import (CUBE_BADPIX, CUBE_DATA, CUBE_LINEFIT, CUBE_LINEFIT_ERR, CUBE_LINEFIT_SN,
+                         CUBE_NOISE, CUBE_SN)
+from ..core.display import IMGMODE_NAMES
+from .scaling import COLOUR_TABLES, ZCUT_NAMES
 
 pg.setConfigOptions(imageAxisOrder="row-major", background="w", foreground="k", antialias=False)
+
+CUBE_ITEMS = [("Data", CUBE_DATA), ("Noise", CUBE_NOISE), ("Bad pixels", CUBE_BADPIX), ("S/N", CUBE_SN),
+              ("Fit map", CUBE_LINEFIT), ("Fit error map", CUBE_LINEFIT_ERR), ("Fit S/N map", CUBE_LINEFIT_SN)]
+ZCUT_ITEMS = [(name, code) for code, name in ZCUT_NAMES.items()]
 
 
 class SpaxelViewBox(pg.ViewBox):
     """ViewBox with kubeviz mouse semantics."""
-    leftPressed = pyqtSignal(float, float)      # view coordinates
+    leftPressed = pyqtSignal(float, float)
     leftDragged = pyqtSignal(float, float)
     leftReleased = pyqtSignal()
-    rightDragged = pyqtSignal(float, float)     # fractional position in the widget (0..1)
+    rightDragged = pyqtSignal(float, float)
     keyPressed = pyqtSignal(object)
 
     def __init__(self):
@@ -72,8 +80,16 @@ class SpaxelViewBox(pg.ViewBox):
         self.keyPressed.emit(ev)
 
 
+def _combo(items, tip):
+    c = QComboBox()
+    for label, code in items:
+        c.addItem(label, code)
+    c.setToolTip(tip)
+    c.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+    return c
+
+
 class SpaxelView(QWidget):
-    """Image + colour bar + slider + info panel."""
     spaxelPressed = pyqtSignal(int, int)
     spaxelDragged = pyqtSignal(int, int)
     spaxelReleased = pyqtSignal()
@@ -81,18 +97,80 @@ class SpaxelView(QWidget):
     sliceChanged = pyqtSignal(int)
     keyPressed = pyqtSignal(object)
     resetViewRequested = pyqtSignal()
+    levelsDragged = pyqtSignal(float, float)          # user moved the colour bar handles
+    cubeSelected = pyqtSignal(int)
+    imgModeSelected = pyqtSignal(int)
+    zcutSelected = pyqtSignal(int)
+    colourSelected = pyqtSignal(int)
+    invertToggled = pyqtSignal(bool)
+    cursorModeSelected = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(2, 2, 2, 2)
+        lay.setContentsMargins(4, 2, 4, 2)
+        lay.setSpacing(3)
 
+        # ---------------- toolbar
+        tb = QHBoxLayout()
+        tb.setSpacing(6)
+        self.cube_combo = _combo(CUBE_ITEMS, "Which cube / map to display")
+        self.mode_combo = _combo([(n, i) for i, n in enumerate(IMGMODE_NAMES)], "Image mode: single slice or a combination over a wavelength range")
+        self.zcut_combo = _combo(ZCUT_ITEMS, "Intensity scaling")
+        self.colour_combo = _combo(COLOUR_TABLES, "Colour table")
+        self.invert_btn = QToolButton()
+        self.invert_btn.setText("Inv")
+        self.invert_btn.setCheckable(True)
+        self.invert_btn.setToolTip("Invert the colour table")
+        self.cursor_btns = []
+        for text, tip, mode in (("+", "Crosshair: click / arrows select a spaxel", 1),
+                                ("Sel", "Mask select: click / drag to add spaxels to the current mask", 2),
+                                ("Desel", "Mask deselect: click / drag to remove spaxels from the mask", 3)):
+            b = QToolButton()
+            b.setText(text)
+            b.setCheckable(True)
+            b.setToolTip(tip)
+            b.clicked.connect(lambda _=False, m=mode: self.cursorModeSelected.emit(m))
+            self.cursor_btns.append(b)
+        self.cursor_btns[0].setChecked(True)
+        tb.addWidget(QLabel("Cube"))
+        tb.addWidget(self.cube_combo)
+        tb.addWidget(QLabel("Mode"))
+        tb.addWidget(self.mode_combo)
+        tb.addWidget(QLabel("Scale"))
+        tb.addWidget(self.zcut_combo)
+        tb.addWidget(self.colour_combo)
+        tb.addWidget(self.invert_btn)
+        tb.addSpacing(10)
+        tb.addWidget(QLabel("Cursor"))
+        for b in self.cursor_btns:
+            tb.addWidget(b)
+        tb.addStretch(1)
+        self.reset_btn = QPushButton("Reset view")
+        self.reset_btn.setToolTip("Show the whole field (wheel: zoom, middle-drag / shift-drag: pan)")
+        self.reset_btn.clicked.connect(self.resetViewRequested)
+        tb.addWidget(self.reset_btn)
+        lay.addLayout(tb)
+        self.cube_combo.currentIndexChanged.connect(lambda i: self.cubeSelected.emit(self.cube_combo.itemData(i)))
+        self.mode_combo.currentIndexChanged.connect(lambda i: self.imgModeSelected.emit(self.mode_combo.itemData(i)))
+        self.zcut_combo.currentIndexChanged.connect(lambda i: self.zcutSelected.emit(self.zcut_combo.itemData(i)))
+        self.colour_combo.currentIndexChanged.connect(lambda i: self.colourSelected.emit(self.colour_combo.itemData(i)))
+        self.invert_btn.toggled.connect(self.invertToggled)
+
+        # ---------------- image + colour bar
         self.glw = pg.GraphicsLayoutWidget()
+        self.glw.ci.layout.setContentsMargins(0, 0, 0, 0)
         self.vb = SpaxelViewBox()
-        self.glw.addItem(self.vb)
+        self.glw.addItem(self.vb, 0, 0)
         self.image = pg.ImageItem()
         self.vb.addItem(self.image)
+        self.colorbar = pg.ColorBarItem(values=(0, 1), width=18, interactive=True, colorMapMenu=False,
+                                        pen=pg.mkPen("k"), hoverPen=pg.mkPen("r"), rounding=1e-9)
+        self.colorbar.setImageItem(self.image)
+        self.colorbar.sigLevelsChangeFinished.connect(self._levels_finished)
+        self.glw.addItem(self.colorbar, 0, 1)
+        self.glw.ci.layout.setColumnStretchFactor(0, 1)
         self.vline = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen((30, 80, 255), width=1.2))
         self.hline = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen((30, 80, 255), width=1.2))
         self.vb.addItem(self.vline, ignoreBounds=True)
@@ -105,6 +183,7 @@ class SpaxelView(QWidget):
         self.ellipse_item.setVisible(False)
         self.vb.addItem(self.ellipse_item, ignoreBounds=True)
         lay.addWidget(self.glw, stretch=1)
+        self._levels_from_code = False
 
         self.vb.leftPressed.connect(lambda x, y: self.spaxelPressed.emit(int(np.floor(x)), int(np.floor(y))))
         self.vb.leftDragged.connect(lambda x, y: self.spaxelDragged.emit(int(np.floor(x)), int(np.floor(y))))
@@ -112,76 +191,52 @@ class SpaxelView(QWidget):
         self.vb.rightDragged.connect(self.contrastDragged)
         self.vb.keyPressed.connect(self.keyPressed)
 
-        # colour bar
-        cb = QHBoxLayout()
-        self.colmin = QLabel(" ")
-        self.colmin.setMinimumWidth(70)
-        self.colmin.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.colorbar = pg.GraphicsLayoutWidget()
-        self.colorbar.setFixedHeight(22)
-        cvb = self.colorbar.addViewBox(enableMenu=False, enableMouse=False)
-        cvb.setMouseEnabled(False, False)
-        self.colorbar_item = pg.ImageItem()
-        cvb.addItem(self.colorbar_item)
-        cvb.setRange(xRange=(0, 256), yRange=(0, 1), padding=0)
-        self.colmax = QLabel(" ")
-        self.colmax.setMinimumWidth(70)
-        cb.addWidget(self.colmin)
-        cb.addWidget(self.colorbar, stretch=1)
-        cb.addWidget(self.colmax)
-        lay.addLayout(cb)
-
-        # wavelength slider
+        # ---------------- wavelength slider
         sl = QHBoxLayout()
-        sl.addWidget(QLabel("Wave:"))
+        sl.addWidget(QLabel("Wave"))
         self.slider = QSlider(Qt.Orientation.Horizontal)
         self.slider.setTracking(True)
         self.slider.valueChanged.connect(self.sliceChanged)
         sl.addWidget(self.slider, stretch=1)
         self.slice_label = QLabel("")
-        self.slice_label.setMinimumWidth(140)
+        self.slice_label.setMinimumWidth(170)
         sl.addWidget(self.slice_label)
-        self.reset_btn = QPushButton("Reset view")
-        self.reset_btn.setToolTip("Show the whole field (wheel: zoom, middle-drag / shift-drag: pan)")
-        self.reset_btn.clicked.connect(self.resetViewRequested)
-        sl.addWidget(self.reset_btn)
         lay.addLayout(sl)
 
-        # info panel
-        info = QGridLayout()
-        info.setHorizontalSpacing(8)
-        self.lbl_image = QLabel(" ")
-        self.lbl_phys = QLabel(" ")
-        self.lbl_value = QLabel(" ")
-        self.lbl_mask = QLabel(" ")
-        self.lbl_cube = QLabel(" ")
-        self.lbl_cube.setFrameShape(QLabel.Shape.Panel)
-        self.lbl_wcs = QLabel(" ")
-        self.lbl_smooth = QLabel(" ")
-        self.lbl_imgmode = QLabel(" ")
-        self.lbl_imgmode.setFrameShape(QLabel.Shape.Panel)
-        r = 0
-        info.addWidget(QLabel("Image:"), r, 0)
-        info.addWidget(self.lbl_image, r, 1)
-        info.addWidget(QLabel("Phys:"), r, 2)
-        info.addWidget(self.lbl_phys, r, 3)
-        info.addWidget(self.lbl_value, r, 4)
-        info.addWidget(QLabel("Mask:"), r, 5)
-        info.addWidget(self.lbl_mask, r, 6)
-        info.addWidget(self.lbl_cube, r, 7)
-        r = 1
-        info.addWidget(QLabel("WCS:"), r, 0)
-        info.addWidget(self.lbl_wcs, r, 1, 1, 4)
-        info.addWidget(QLabel("Smooth:"), r, 5)
-        info.addWidget(self.lbl_smooth, r, 6)
-        info.addWidget(self.lbl_imgmode, r, 7)
-        lay.addLayout(info)
+        # ---------------- info strip
+        self.info = QLabel(" ")
+        f = QFont("Menlo")
+        f.setStyleHint(QFont.StyleHint.Monospace)
+        f.setPointSize(11)
+        self.info.setFont(f)
+        self.info.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        lay.addWidget(self.info)
 
-    # ------------------------------------------------------------------ API used by the controller
-    def set_rgb(self, rgb: np.ndarray) -> None:
-        """Display an (Nrow, Ncol, 3) uint8 image; pixel (col,row) covers [col,col+1]x[row,row+1]."""
-        self.image.setImage(rgb, autoLevels=False)
+    # ------------------------------------------------------------------ colour bar
+    def _levels_finished(self, *args):
+        if self._levels_from_code:
+            return
+        lo, hi = self.colorbar.levels()
+        self.levelsDragged.emit(float(lo), float(hi))
 
+    def set_display(self, data, levels, cmap: pg.ColorMap, label: str, linear: bool) -> None:
+        """Show ``data`` (NaN = bad, drawn white) with ``levels``; the colour bar is
+        interactive only for linear scalings (its ticks are real values then)."""
+        self._levels_from_code = True
+        try:
+            self.image.setImage(data, autoLevels=False)
+            self.image.setLookupTable(cmap.getLookupTable(nPts=256))
+            self.image.setLevels(levels)
+            self.colorbar.setColorMap(cmap)
+            self.colorbar.setLevels(levels)
+            self.colorbar.interactive = linear
+            self.colorbar.axis.setStyle(showValues=linear)
+            self.colorbar.axis.setStyle(showValues=linear, tickLength=5 if linear else 0)
+            self.colorbar.axis.setLabel(label)
+        finally:
+            self._levels_from_code = False
+
+    # ------------------------------------------------------------------ overlays
     def reset_view(self, ncol: int, nrow: int) -> None:
         self.vb.setRange(xRange=(0, ncol), yRange=(0, nrow), padding=0.01)
 
@@ -205,31 +260,33 @@ class SpaxelView(QWidget):
         self.ellipse_item.setRect(cx - rx + 0.5, cy - ry + 0.5, 2 * rx, 2 * ry)
         self.ellipse_item.setVisible(visible)
 
-    def set_colorbar(self, lut_rgb: np.ndarray, lo: float, hi: float) -> None:
-        strip = (lut_rgb[None, :, :] * 255).astype(np.uint8)
-        self.colorbar_item.setImage(strip, autoLevels=False)
-        fmt = lambda v: f"{v:.1f}" if abs(v) < 1e5 else f"{v:.2E}"
-        self.colmin.setText(fmt(lo))
-        self.colmax.setText(fmt(hi))
-
+    # ------------------------------------------------------------------ controls state
     def set_slice(self, wpix: int, nwpix: int, wave: float | None) -> None:
         self.slider.blockSignals(True)
         self.slider.setRange(0, max(nwpix - 1, 0))
         self.slider.setValue(int(wpix))
         self.slider.blockSignals(False)
-        txt = f"{wpix}" if wave is None else f"{wpix}   λ = {wave:.2f}"
+        txt = f"slice {wpix}" if wave is None else f"slice {wpix}   λ = {wave:.2f} Å"
         self.slice_label.setText(txt)
 
-    def set_info(self, image_coords: str, phys_coords: str, value: float, mask: str, cube: str,
-                 wcs: str, smooth: str, imgmode: str) -> None:
-        self.lbl_image.setText(image_coords)
-        self.lbl_phys.setText(phys_coords)
-        self.lbl_value.setText("NaN" if not np.isfinite(value) else f"{value:.4f}")
-        self.lbl_mask.setText(mask)
-        self.lbl_cube.setText(cube)
-        self.lbl_wcs.setText(wcs)
-        self.lbl_smooth.setText(smooth)
-        self.lbl_imgmode.setText(imgmode)
+    def set_info(self, col, row, pcol, prow, value: float, mask: str, cube: str, wcs: str,
+                 smooth: str, imgmode: str) -> None:
+        val = "NaN" if not np.isfinite(value) else f"{value:.4g}"
+        self.info.setText(f"({col:>4},{row:>4})  phys ({pcol:>4},{prow:>4})  value {val:<12} {wcs}   mask {mask}  smooth {smooth}   {cube} · {imgmode}")
+
+    def sync_controls(self, cubesel, imgmode, zcuts, ctab, invert, cursormode) -> None:
+        for combo, value in ((self.cube_combo, cubesel), (self.mode_combo, imgmode),
+                             (self.zcut_combo, zcuts), (self.colour_combo, ctab)):
+            idx = combo.findData(value)
+            if idx >= 0 and idx != combo.currentIndex():
+                combo.blockSignals(True)
+                combo.setCurrentIndex(idx)
+                combo.blockSignals(False)
+        self.invert_btn.blockSignals(True)
+        self.invert_btn.setChecked(bool(invert))
+        self.invert_btn.blockSignals(False)
+        for i, b in enumerate(self.cursor_btns):
+            b.setChecked(cursormode == i + 1)
 
     def keyPressEvent(self, ev):
         self.keyPressed.emit(ev)

@@ -24,10 +24,19 @@ underscores are accepted): --noisefile, --ext, --noise-ext, --trim, --fluxfac,
 
 ** Windows **
 
-One main window holds the spaxel viewer (left), the spectrum viewer (top right)
-and the spectral zoom (bottom right, shown with Toggle Zoom). All three panels
-are resizable by dragging the separators. The linefit window is a separate
-window; if closed, reopen it with Options -> Show linefit window.
+One main window. The spaxel viewer is the central panel: a toolbar (cube, image
+mode, intensity scaling, colour table, invert, cursor mode), the image with an
+interactive colour bar (drag the bar handles to set the cuts; the bar is labelled
+with the displayed quantity), the wavelength slider and a one-line info strip.
+The other panels are dock widgets: Spectrum and Spectral zoom (right column),
+Fit controls (right column, with the Fit setup / Options / Status groups that
+fold away and the action buttons always visible) and Line parameters (the table,
+under the image). Docks can be dragged to other positions, floated or closed
+(reopen with Options -> Show linefit window / Toggle Zoom); the layout is
+remembered between sessions. The table shows one row per line; the rows of the
+second component appear with the "2nd component rows" switch (automatically
+when a second component is fitted). The status bar shows the last message and,
+during long fits, a progress bar with an Interrupt button.
 
 ** Mouse in the spaxel viewer **
 

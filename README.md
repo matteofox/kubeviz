@@ -24,8 +24,8 @@ Batch mode (fit every spaxel of a cube, write the results FITS and a session fil
 kubeviz cube.fits --redshift 0.85 --lineset 1 --batch --fit-all-lines --outdir results/
 ```
 
-Interactive session (same layout as the IDL version: spaxel viewer, spectrum, spectral zoom
-and the linefit window):
+Interactive session (spaxel viewer with an interactive colour bar, spectrum, spectral zoom,
+fit controls and line-parameter table as dockable panels):
 
 ```bash
 kubeviz cube.fits --redshift 0.85 --lineset 1

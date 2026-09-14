@@ -36,10 +36,8 @@ def gui(qapp, synth_cube):
     state = start_session(fname, redshift=truth["redshift"], lineset=1)
     g = KubevizGUI(state, {})
     g.show()
-    g.linefit.show()
     qapp.processEvents()
     yield g
-    g.linefit.close()
     g.close()
 
 
@@ -63,8 +61,13 @@ def test_scaling_functions():
 
 def test_gui_builds_and_updates(gui, qapp):
     st = gui.state
-    assert gui.spax.image.image.shape == (st.Nrow, st.Ncol, 3)
+    assert gui.spax.image.image.shape == (st.Nrow, st.Ncol)
     assert len(gui.linefit.w) == 2 * 2 + 3 * st.Nlines
+    gui.spax.cube_combo.setCurrentIndex(3)                 # toolbar -> S/N
+    assert st.cubesel == C.CUBE_SN
+    gui.spax.cube_combo.setCurrentIndex(0)
+    gui._levels_dragged(1.0, 50.0)                        # colour bar handles -> user cuts
+    assert st.zcuts == 1 and st.zmin_ima == 1.0
     # move crosshair with the keyboard and mouse
     c0 = st.col
     gui.keyboard(_key("", Qt.Key.Key_Right), "spax")
@@ -104,8 +107,8 @@ def test_gui_fit_and_result_maps(gui, qapp):
     assert rs.n[5, 6, 3] > 0
     assert "Not Fit" not in lf.w[("N", 3)]["best"].text()
     # show the fit in the zoom window
+    gui.zoom_dock.setVisible(True)
     st.zoommap = True
-    gui.zoom.setVisible(True)
     lf.ctl.linefit_action("SHOWN3")
     lf.ctl.linefit_action("SHOWC3")
     st.wpix = int(np.argmin(np.abs(st.wave - st.lines[0])))

@@ -11,9 +11,12 @@ from __future__ import annotations
 import os
 
 import numpy as np
-from PyQt6.QtCore import Qt
+import logging
+
+from PyQt6.QtCore import QSettings, Qt
 from PyQt6.QtGui import QAction, QActionGroup
-from PyQt6.QtWidgets import QApplication, QFileDialog, QMainWindow, QMessageBox, QSplitter
+from PyQt6.QtWidgets import (QApplication, QDockWidget, QFileDialog, QLabel, QMainWindow, QMessageBox,
+                             QProgressBar, QPushButton)
 
 from .. import utils
 from ..constants import (CUBE_BADPIX, CUBE_DATA, CUBE_LINEFIT, CUBE_LINEFIT_ERR, CUBE_LINEFIT_SN,
@@ -39,10 +42,11 @@ from ..io.session import SESSION_EXT, load_session, save_session
 from ..io.spectra import savecube, saveimage, savespec
 from . import dialogs
 from .fitoverlay import fit_overlays
-from .linefit_window import LinefitWindow
-from .scaling import (COLOUR_TABLES, ZCUT_HISTEQ, ZCUT_MINMAX, ZCUT_USER_LIN, ZCUT_USER_LOG,
+from .linefit_window import LinefitPanels
+from .scaling import (COLOUR_TABLES, ZCUT_HISTEQ, ZCUT_MINMAX, ZCUT_NAMES, ZCUT_USER_LIN, ZCUT_USER_LOG,
                       ZCUT_USER_SQRT, ZCUT_ZSCALE, ZCUT_950, ZCUT_970, ZCUT_990, ZCUT_995, colour_table,
-                      contrast_lut_indices, render_rgb, scale_image)
+                      contrast_lut_indices, scale_image)
+import pyqtgraph as pg
 from .spaxel_view import SpaxelView
 from .spectrum_view import SpecZoomView, SpectrumView
 
@@ -87,50 +91,109 @@ class KubevizGUI(QMainWindow):
         self._nomove = False
         self._paint_value = 1
 
-        self.setWindowTitle(f"spaxel viewer: {state.filename}")
+        self.setWindowTitle(f"kubeviz: {state.filename}")
+        self.setDockNestingEnabled(True)
         self.spax = SpaxelView()
         self.spec = SpectrumView()
         self.zoom = SpecZoomView()
-        right = QSplitter(Qt.Orientation.Vertical)
-        right.addWidget(self.spec)
-        right.addWidget(self.zoom)
-        self.right = right
-        split = QSplitter(Qt.Orientation.Horizontal)
-        split.addWidget(self.spax)
-        split.addWidget(right)
-        split.setStretchFactor(0, 1)
-        split.setStretchFactor(1, 1)
-        self.setCentralWidget(split)
-        self.resize(1400, 800)
-        self.zoom.setVisible(bool(state.zoommap))
+        self.setCentralWidget(self.spax)
+
+        def dock(title, widget, name):
+            d = QDockWidget(title, self)
+            d.setObjectName(name)
+            d.setWidget(widget)
+            d.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+                          | QDockWidget.DockWidgetFeature.DockWidgetClosable)
+            return d
+        self.spec_dock = dock("Spectrum", self.spec, "dock_spectrum")
+        self.zoom_dock = dock("Spectral zoom", self.zoom, "dock_zoom")
+        self.ctrl_dock = dock("Fit controls", None, "dock_controls")
+        self.table_dock = dock("Line parameters", None, "dock_table")
+        area = Qt.DockWidgetArea.RightDockWidgetArea
+        self.addDockWidget(area, self.spec_dock)
+        self.addDockWidget(area, self.zoom_dock)
+        self.addDockWidget(area, self.ctrl_dock)
+        # the right column runs the full height; the table sits under the image only
+        self.setCorner(Qt.Corner.BottomRightCorner, Qt.DockWidgetArea.RightDockWidgetArea)
+        self.setCorner(Qt.Corner.TopRightCorner, Qt.DockWidgetArea.RightDockWidgetArea)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.table_dock)
+        self.resizeDocks([self.spec_dock, self.zoom_dock, self.ctrl_dock], [300, 260, 300], Qt.Orientation.Vertical)
+        self.resizeDocks([self.spec_dock], [720], Qt.Orientation.Horizontal)
+        self.zoom_dock.visibilityChanged.connect(self._zoom_dock_visibility)
+        self.resize(1600, 1000)
+
+        # status bar: last log message, progress and interrupt
+        sb = self.statusBar()
+        self.status_label = QLabel("")
+        sb.addWidget(self.status_label, 1)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 1000)
+        self.progress_bar.setMaximumWidth(260)
+        self.progress_bar.setVisible(False)
+        sb.addPermanentWidget(self.progress_bar)
+        self.interrupt_btn = QPushButton("Interrupt")
+        self.interrupt_btn.setVisible(False)
+        self._cancel_requested = False
+        self.interrupt_btn.clicked.connect(self._request_cancel)
+        sb.addPermanentWidget(self.interrupt_btn)
+        self._log_handler = _StatusLogHandler(self.status_label)
+        utils.log.addHandler(self._log_handler)
 
         self._build_menus()
         self._connect()
         self.linefit = None
         self._install_linefit()
         self.spax.reset_view(state.Ncol, state.Nrow)
+        self._restore_layout()
+        self.zoom_dock.setVisible(bool(state.zoommap))
         self.update_all(UPDATE_FULL)
 
     def _install_linefit(self):
-        """(Re)create the linefit table window and embed its controls in the right column."""
-        if self.linefit is not None:
-            self.linefit.detach_controls()
-            self.linefit.close()
-        self.linefit = LinefitWindow(self)
+        """(Re)create the line parameter table and the fit controls."""
+        self.linefit = LinefitPanels(self)
         self.state.on_userpars_changed = lambda: self.linefit.update_all(update_userpars=True)
-        if self.right.count() >= 3:
-            old = self.right.widget(2)
-            old.setParent(None)
-        self.right.addWidget(self.linefit.controls)
-        h = max(self.right.height(), 600)
-        self.right.setSizes([int(h * 0.32), int(h * 0.30), int(h * 0.38)])
+        for d in (self.ctrl_dock, self.table_dock):
+            old = d.widget()
+            if old is not None:
+                old.setParent(None)
+                old.deleteLater()
+        self.ctrl_dock.setWidget(self.linefit.controls)
+        self.table_dock.setWidget(self.linefit.table)
+
+    def show_table(self):
+        self.table_dock.show()
+        self.table_dock.raise_()
+        self.state.linefitmap = True
+
+    def _zoom_dock_visibility(self, visible):
+        self.state.zoommap = bool(visible)
+        if visible:
+            self.plotspeczoom()
+
+    def _settings(self):
+        return QSettings("kubeviz", "gui")
+
+    def _restore_layout(self):
+        s = self._settings()
+        geo = s.value("geometry")
+        st = s.value("windowState")
+        if geo is not None:
+            self.restoreGeometry(geo)
+        if st is not None:
+            self.restoreState(st)
+
+    def _save_layout(self):
+        s = self._settings()
+        s.setValue("geometry", self.saveGeometry())
+        s.setValue("windowState", self.saveState())
+
+    def _request_cancel(self):
+        self._cancel_requested = True
 
     # ================================================================== window management
     def show_all(self):
         self.show()
-        self.linefit.show()
-        self.linefit.move(self.x() + 40, self.y() + 60)
-        self.state.linefitmap = True
+        self.state.linefitmap = self.table_dock.isVisible()
 
     def closeEvent(self, ev):
         self.quit()
@@ -142,7 +205,8 @@ class KubevizGUI(QMainWindow):
             save_session(self.state, os.path.join(self.state.cwdir or ".", "lastsession" + SESSION_EXT), light=True)
         except Exception as exc:  # pragma: no cover
             utils.warn(f"Could not save lastsession: {exc}")
-        self.linefit.close()
+        self._save_layout()
+        utils.log.removeHandler(self._log_handler)
         QApplication.instance().quit()
 
     # ================================================================== menus
@@ -236,6 +300,7 @@ class KubevizGUI(QMainWindow):
         self.actions["MonteCarloPlot"].setChecked(bool(st.plotMonteCarlodistrib))
         self.actions["MonteCarloSave"].setChecked(bool(st.saveMonteCarlodistrib))
         self.actions["NoiseCubeErrScale"].setChecked(bool(st.scaleNoiseerrors))
+        self.spax.sync_controls(st.cubesel, st.imgmode, st.zcuts, st.ctab, st.invert == 1, st.cursormode)
 
     def _connect(self):
         self.spax.spaxelPressed.connect(self.on_spaxel_pressed)
@@ -245,6 +310,20 @@ class KubevizGUI(QMainWindow):
         self.spax.sliceChanged.connect(self.on_slice_changed)
         self.spax.keyPressed.connect(lambda ev: self.keyboard(ev, "spax"))
         self.spax.resetViewRequested.connect(lambda: self.spax.reset_view(self.state.Ncol, self.state.Nrow))
+        self.spax.levelsDragged.connect(self._levels_dragged)
+        cube_codes = {CUBE_DATA: "Data", CUBE_NOISE: "Noise", CUBE_BADPIX: "BadPixels", CUBE_SN: "SN",
+                      CUBE_LINEFIT: "Linefit", CUBE_LINEFIT_ERR: "LineErrors", CUBE_LINEFIT_SN: "LineSN"}
+        self.spax.cubeSelected.connect(lambda v: self.menu_action(cube_codes[v]))
+        mode_codes = ["Slice", "Sum1", "Median1", "WeightedAvg1", "WeightedMed1", "MedSub1", "Sum2", "Median2",
+                      "WeightedAvg2", "WeightedMed2", "MedSub2", "Med2-Med1", "Med1-Med2"]
+        self.spax.imgModeSelected.connect(lambda v: self.menu_action(mode_codes[v]))
+        zcut_codes = {ZCUT_HISTEQ: "HistEq", ZCUT_ZSCALE: "Zscale", ZCUT_MINMAX: "MinMax", ZCUT_995: "99.5", ZCUT_990: "99.0",
+                      ZCUT_970: "97.0", ZCUT_950: "95.0", ZCUT_USER_LIN: "UserLin", ZCUT_USER_SQRT: "UserSqrt", ZCUT_USER_LOG: "UserLog"}
+        self.spax.zcutSelected.connect(lambda v: self.menu_action(zcut_codes[v]))
+        colour_codes = {num: name for name, num in COLOUR_TABLES}
+        self.spax.colourSelected.connect(lambda v: self.menu_action(colour_codes[v]))
+        self.spax.invertToggled.connect(lambda on: self.menu_action("Invert") if on != (self.state.invert == 1) else None)
+        self.spax.cursorModeSelected.connect(lambda m: self.menu_action({1: "Crosshair", 2: "Select", 3: "Deselect"}[m]))
         self.spec.wavelengthClicked.connect(self.on_spec_clicked)
         self.spec.keyPressed.connect(lambda ev: self.keyboard(ev, "spec"))
         self.spec.zminChanged.connect(self._set_zmin_spec)
@@ -299,9 +378,8 @@ class KubevizGUI(QMainWindow):
             self.last_range = rng
             self._cached_scaled = scaled
             self._cached_image = image
-            self._cached_rgb = render_rgb(scaled, self.lut, invert=(st.invert == 1), indices=self.lut_indices)
-            self.spax.set_colorbar(self._lut_display(), *rng)
-        self.spax.set_rgb(self._cached_rgb)
+            self._cached_rgb = True
+            self._render()
         self.spax.set_crosshair(st.col, st.row, visible=st.cursormode >= 1)
         self.spax.set_mask(st.current_mask() if st.cursormode >= 2 else None, visible=st.cursormode >= 2)
         self.spax.set_slice(st.wpix, st.Nwpix, float(st.wave[st.wpix]) if st.wave is not None else None)
@@ -312,13 +390,59 @@ class KubevizGUI(QMainWindow):
             lut = lut[self.lut_indices]
         return lut
 
-    def rerender(self):
-        """Re-apply the colour table without recomputing the image (contrast drag)."""
+    _LINEAR_ZCUTS = (ZCUT_USER_LIN, ZCUT_MINMAX, ZCUT_ZSCALE, ZCUT_995, ZCUT_990, ZCUT_970, ZCUT_950)
+
+    def _map_label(self) -> str:
+        st = self.state
+        if st.cubesel in (CUBE_LINEFIT, CUBE_LINEFIT_ERR, CUBE_LINEFIT_SN):
+            pb = st.par_imagebutton
+            if pb == "FLAG":
+                what = "flag"
+            elif pb == "CHISQ":
+                what = "reduced χ²"
+            elif pb:
+                lt, par = pb[0], int(pb[1:])
+                comp = {"N": "1st comp.", "B": "2nd comp.", "C": "continuum at"}[lt]
+                if lt == "C":
+                    what = f"{comp} {st.linefancynames[par - 3]}"
+                elif par == 1:
+                    what = f"{comp} velocity (km/s)"
+                elif par == 2:
+                    what = f"{comp} dispersion (km/s)"
+                else:
+                    what = f"{comp} {st.linefancynames[par - 3]} flux"
+            else:
+                what = "fit result"
+            prefix = {CUBE_LINEFIT: "", CUBE_LINEFIT_ERR: "error of ", CUBE_LINEFIT_SN: "S/N of "}[st.cubesel]
+            return prefix + what
+        mode = IMGMODE_NAMES[st.imgmode] if st.imgmode != IMG_SLICE else f"slice {st.wpix}"
+        return f"{CUBESEL_NAMES[st.cubesel]} · {mode}"
+
+    def _render(self):
+        """Send the cached image to the viewer with the current colour table and cuts."""
+        st = self.state
         if self._cached_scaled is None:
             return
-        self._cached_rgb = render_rgb(self._cached_scaled, self.lut, invert=(self.state.invert == 1), indices=self.lut_indices)
-        self.spax.set_rgb(self._cached_rgb)
-        self.spax.set_colorbar(self._lut_display(), *self.last_range)
+        lut = self._lut_display()
+        cmap = pg.ColorMap(np.linspace(0, 1, lut.shape[0]), (lut * 255).astype(np.uint8))
+        linear = st.zcuts in self._LINEAR_ZCUTS
+        lo, hi = self.last_range
+        label = self._map_label()
+        if linear:
+            self.spax.set_display(self._cached_image, (lo, hi), cmap, label, True)
+        else:
+            self.spax.set_display(self._cached_scaled, (0.0, 1.0), cmap, f"{label}  [{ZCUT_NAMES.get(st.zcuts, '')}: {lo:.3g} … {hi:.3g}]", False)
+
+    def rerender(self):
+        """Re-apply the colour table without recomputing the image (contrast drag)."""
+        self._render()
+
+    def _levels_dragged(self, lo, hi):
+        st = self.state
+        st.zmin_ima, st.zmax_ima = float(lo), float(hi)
+        st.zcuts = ZCUT_USER_LIN
+        self.plotspax()
+        self._sync_menu_checks()
 
     def plotinfo(self):
         st = self.state
@@ -339,8 +463,8 @@ class KubevizGUI(QMainWindow):
         except Exception:
             if st.wave is not None and st.wave[0] > 0:
                 wcs = f"(SPATIAL WCS NOT FOUND, {st.wave[st.wpix]:.2f})"
-        imgmode = IMGMODE_NAMES[st.imgmode] if st.imgmode != IMG_SLICE else f"Slice {st.wpix}"
-        self.spax.set_info(f"({st.col},{st.row})", f"({st.col + st.Startcol},{st.row + st.Startrow})", val,
+        imgmode = IMGMODE_NAMES[st.imgmode] if st.imgmode != IMG_SLICE else f"slice {st.wpix}"
+        self.spax.set_info(st.col, st.row, st.col + st.Startcol, st.row + st.Startrow, val,
                            f"{st.imask}/{st.Nmask}", CUBESEL_NAMES[st.cubesel], wcs,
                            f"{st.smooth}x{st.smooth}x{st.specsmooth}", imgmode)
 
@@ -491,9 +615,7 @@ class KubevizGUI(QMainWindow):
         self.update_all(UPDATE_FULL)
 
     def _toggle_zoom(self):
-        self.state.zoommap = not self.state.zoommap
-        self.zoom.setVisible(self.state.zoommap)
-        self.plotspeczoom()
+        self.zoom_dock.setVisible(not self.zoom_dock.isVisible())
 
     def _save_spec(self):
         fname, _ = QFileDialog.getSaveFileName(self, "Save spectrum", self.state.cwdir, "FITS (*.fits)")
@@ -651,10 +773,23 @@ class KubevizGUI(QMainWindow):
         self._autoflag_current()
 
     def _run_with_progress(self, title, func):
-        dlg = dialogs.FitProgressDialog(title, self)
-        dlg.show()
-        QApplication.processEvents()
+        """Run a long loop with progress and an Interrupt button in the status bar."""
         st = self.state
+        self._cancel_requested = False
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(True)
+        self.interrupt_btn.setVisible(True)
+        self.status_label.setText(f"{title}...")
+        QApplication.processEvents()
+
+        def should_cancel():
+            QApplication.processEvents()
+            return self._cancel_requested
+
+        def progress(fraction, message):
+            self.progress_bar.setValue(int(1000 * min(max(fraction, 0.0), 1.0)))
+            self.status_label.setText(message.replace("[PROGRES] ", ""))
+            QApplication.processEvents()
 
         def on_fit(col, row):
             if col is not None and st.Ncol < 200 and st.Nrow < 200:
@@ -662,17 +797,18 @@ class KubevizGUI(QMainWindow):
             QApplication.processEvents()
 
         try:
-            result = func(dlg.should_cancel, dlg.progress, on_fit)
+            result = func(should_cancel, progress, on_fit)
         finally:
-            dlg.close()
+            self.progress_bar.setVisible(False)
+            self.interrupt_btn.setVisible(False)
         return result
 
     def do_change_redshift(self, z):
         st = self.state
+        if abs(z - st.redshift) < 1e-9:
+            return
         change_redshift(st, z)
         self._install_linefit()
-        self.linefit.show()
-        st.linefitmap = True
         self.update_all(UPDATE_FULL)
 
     # ================================================================== linefit window actions
@@ -939,8 +1075,7 @@ class KubevizGUI(QMainWindow):
                     QMessageBox.critical(self, "kubeviz", f"Could not load session:\n{exc}")
             return
         if code == "ShowLinefit":
-            self.linefit.show()
-            self.linefit.raise_()
+            self.show_table()
             return
         if code.startswith("Help"):
             {"HelpWhatIsNew": dialogs.help_whatsnew, "HelpInstructions": dialogs.help_instructions,
@@ -1056,7 +1191,6 @@ class KubevizGUI(QMainWindow):
                 linefit_init(st)
                 medsum_image_update(st)
                 self._install_linefit()
-                self.linefit.show()
             else:
                 return
         elif code == "FitallRange":
@@ -1151,11 +1285,25 @@ class KubevizGUI(QMainWindow):
         self.lut = colour_table(self.state.ctab)
         self.lut_indices = None
         self._cached_rgb = None
-        self.setWindowTitle(f"spaxel viewer: {self.state.filename}")
+        self.setWindowTitle(f"kubeviz: {self.state.filename}")
         self._install_linefit()
-        self.linefit.show()
-        self.zoom.setVisible(bool(self.state.zoommap))
         self.spax.reset_view(self.state.Ncol, self.state.Nrow)
         if self.state.specmode > 0:
             medianspec(self.state)
         self.update_all(UPDATE_FULL)
+
+
+class _StatusLogHandler(logging.Handler):
+    """Forward kubeviz log messages to the status bar label."""
+
+    def __init__(self, label):
+        super().__init__()
+        self.label = label
+
+    def emit(self, record):
+        try:
+            msg = record.getMessage()
+            if msg.strip():
+                self.label.setText(msg.replace("[KUBEVIZ] ", "").replace("[PROGRES] ", ""))
+        except Exception:  # pragma: no cover
+            pass

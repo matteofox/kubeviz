@@ -1,9 +1,14 @@
-"""The linefit window (``kubeviz_setup_linefit`` / ``kubeviz_linefit_update`` /
-``kubeviz_linefit_typeswitch``).
+"""Line-fit panels (``kubeviz_setup_linefit`` / ``kubeviz_linefit_update`` /
+``kubeviz_linefit_typeswitch``), redesigned as two dockable widgets:
 
-All user actions are forwarded to ``controller.linefit_action(code, value)`` with the
-same codes the IDL event handler used (``'FIT'``, ``'FITALL'``, ``'SPN3'``, ``'MINPB1'``,
-``'FIXN2'``, ``'IMAGEC4'``...), so the two implementations stay easy to compare.
+* ``table``    - the parameter table: one row per line (1st component, with the
+  continuum columns appended) plus optional 2nd-component rows and the two
+  kinematic rows;
+* ``controls`` - collapsible groups (Fit setup, Options, Status) and two rows of
+  action buttons that are always visible.
+
+All user actions go to ``controller.linefit_action(code, value)`` with the IDL uvalue
+codes (``'FIT'``, ``'SPN3'``, ``'MINPB1'``, ``'FIXN2'``, ``'IMAGEC4'`` ...).
 """
 from __future__ import annotations
 
@@ -11,90 +16,148 @@ import numpy as np
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (QButtonGroup, QCheckBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
-                             QLineEdit, QMainWindow, QPushButton, QRadioButton, QScrollArea,
-                             QVBoxLayout, QWidget)
+                             QLineEdit, QPushButton, QRadioButton, QScrollArea, QSizePolicy,
+                             QToolButton, QVBoxLayout, QWidget)
 
 from .. import utils
 from ..constants import (CKMS, ERR_METHOD_NAMES, FIT_GAUSS, INSTRRES_EXTPOLY, INSTRRES_TEMPLATE,
                          INSTRRES_VARPOLY, MODE_SPAXEL, NOT_FIT)
 
-INSTRRES_MODE_TEXT = {INSTRRES_VARPOLY: "(Polynomial fit to cube variance)",
-                      INSTRRES_EXTPOLY: "(Polynomial fit to external arcs)",
-                      INSTRRES_TEMPLATE: "(Spectral Templates)"}
+INSTRRES_MODE_TEXT = {INSTRRES_VARPOLY: "(polynomial fit to cube variance)",
+                      INSTRRES_EXTPOLY: "(polynomial fit to external arcs)",
+                      INSTRRES_TEMPLATE: "(spectral templates)"}
 
 
-def _userparstring(v) -> str:
-    return "Not Set" if v == NOT_FIT else f"{v:.2f}"
-
-
-def _edit(width=64, text=""):
-    e = QLineEdit(text)
-    e.setFixedWidth(width)
-    return e
-
-
-def _hline():
-    f = QFrame()
-    f.setFrameShape(QFrame.Shape.HLine)
+def _mono_font():
+    f = QFont("Menlo")
+    f.setStyleHint(QFont.StyleHint.Monospace)
     return f
 
 
-class LinefitWindow(QMainWindow):
-    COLS = ["", "component", "lambda_cen", "start", "best", "min", "max", "fix", "reset", "image", "fit", "show"]
+def _userparstring(v) -> str:
+    return "" if v == NOT_FIT else f"{v:.2f}"
+
+
+def _edit(width=62, text="", tip=""):
+    e = QLineEdit(text)
+    e.setFixedWidth(width)
+    e.setPlaceholderText("auto")
+    if tip:
+        e.setToolTip(tip)
+    return e
+
+
+def _mono_label(text="", width=None, align_right=True):
+    lbl = QLabel(text)
+    lbl.setFont(_mono_font())
+    if width:
+        lbl.setMinimumWidth(width)
+    if align_right:
+        lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+    return lbl
+
+
+def _cont_string(value, err):
+    err = np.asarray(err, dtype=float)
+    if err[0] == NOT_FIT:
+        return "Not Fit"
+    if err[0] == -998:
+        return f"{value:.4f} +/- No Errors"
+    return f"{value:.4f}+{err[0]:.4f}/{err[1]:.4f}"
+
+
+class Collapsible(QWidget):
+    """A titled section whose content can be folded away."""
+
+    def __init__(self, title: str, content: QWidget, expanded: bool = True):
+        super().__init__()
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        self.btn = QToolButton()
+        self.btn.setText(title)
+        self.btn.setCheckable(True)
+        self.btn.setChecked(expanded)
+        self.btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.btn.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+        self.btn.setStyleSheet("QToolButton { border: none; font-weight: bold; text-align: left; padding: 2px; }")
+        self.btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.content = content
+        self.content.setVisible(expanded)
+        self.btn.toggled.connect(self._toggle)
+        lay.addWidget(self.btn)
+        lay.addWidget(content)
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        lay.addWidget(line)
+
+    def _toggle(self, on):
+        self.content.setVisible(on)
+        self.btn.setArrowType(Qt.ArrowType.DownArrow if on else Qt.ArrowType.RightArrow)
+
+
+class LinefitPanels:
+    """Builds ``self.table`` and ``self.controls`` for a controller/state pair."""
+
+    COLS = ["", "comp.", "λ cen", "start", "best", "min", "max", "fix", "reset", "img", "fit", "show",
+            "continuum", "img", "fit", "show"]
+    _BANDS = ("#f7f7f7", "#e8e8e8")
 
     def __init__(self, controller):
-        super().__init__()
         self.ctl = controller
         self.state = controller.state
-        self.setWindowTitle(f"linefit: {self.state.filename}")
-        self.w = {}                  # (linetype, par) -> dict of widgets
-        self.image_group = QButtonGroup(self)
-        self.image_group.setExclusive(True)
+        self.w = {}
         self._building = False
-        self._build()
+        self.image_group = QButtonGroup()
+        self.image_group.setExclusive(True)
+        self.table = self._build_table()
+        self.controls = self._build_controls()
+        self.typeswitch()
+        self.update_all(update_userpars=True)
 
-    # ================================================================== construction
-    def _build(self):
+    # ================================================================== table
+    def _build_table(self) -> QWidget:
         self._building = True
         st = self.state
-        central = QWidget()
-        outer = QVBoxLayout(central)
+        outer_widget = QWidget()
+        outer = QVBoxLayout(outer_widget)
         outer.setContentsMargins(4, 4, 4, 4)
+        outer.setSpacing(4)
 
-        # ---------------- header
         hdr = QHBoxLayout()
-        hdr.addWidget(QLabel("Fit Type:"))
         self.lbl_type = QLabel("GAUSS")
         self.lbl_type.setStyleSheet("font-weight: bold")
+        hdr.addWidget(QLabel("Fit type"))
         hdr.addWidget(self.lbl_type)
-        hdr.addSpacing(12)
-        hdr.addWidget(QLabel("Error method:"))
-        self.lbl_errmethod = QLabel("")
-        hdr.addWidget(self.lbl_errmethod)
-        hdr.addSpacing(12)
+        hdr.addSpacing(14)
         hdr.addWidget(QLabel("z ="))
-        self.edit_z = _edit(90, f"{st.redshift:.6f}")
-        self.edit_z.editingFinished.connect(lambda: self._text("REDSHIFT", self.edit_z))
+        self.edit_z = _edit(90, f"{st.redshift:.6f}", "Redshift used to place the lines (Enter to apply; resets the fits)")
+        self.edit_z.setPlaceholderText("")
+        self.edit_z.returnPressed.connect(lambda: self._text("REDSHIFT", self.edit_z))
         hdr.addWidget(self.edit_z)
-        hdr.addSpacing(12)
+        hdr.addSpacing(14)
         self.lbl_mode = QLabel("SPAXEL")
         self.lbl_mode.setStyleSheet("font-weight: bold")
         hdr.addWidget(self.lbl_mode)
-        self.lbl_sel = QLabel("")
+        self.lbl_sel = _mono_label("", align_right=False)
         hdr.addWidget(self.lbl_sel)
         self.btn_prevmask = QPushButton("-")
         self.btn_nextmask = QPushButton("+")
         for b, code in ((self.btn_prevmask, "PREVMASK"), (self.btn_nextmask, "NEXTMASK")):
-            b.setFixedWidth(28)
+            b.setFixedWidth(26)
             b.clicked.connect(lambda _=False, c=code: self.ctl.linefit_action(c))
             hdr.addWidget(b)
         hdr.addStretch(1)
+        self.cb_second = QCheckBox("2nd component rows")
+        self.cb_second.setToolTip("Show the rows of the second (broad / offset) component")
+        self.cb_second.setChecked(bool(np.any(st.pbdofit[:st.Nlines])))
+        self.cb_second.toggled.connect(self._toggle_second_rows)
+        hdr.addWidget(self.cb_second)
         outer.addLayout(hdr)
 
-        # ---------------- parameter table
         self.grid = QGridLayout()
-        self.grid.setHorizontalSpacing(6)
-        self.grid.setVerticalSpacing(2)
+        self.grid.setHorizontalSpacing(5)
+        self.grid.setVerticalSpacing(1)
         self.col_labels = []
         for j, name in enumerate(self.COLS):
             lbl = QLabel(name)
@@ -104,258 +167,63 @@ class LinefitWindow(QMainWindow):
             lbl.setFont(f)
             self.grid.addWidget(lbl, 0, j)
             self.col_labels.append(lbl)
+        self.second_rows = []
         row = 1
-        row = self._add_kin_rows(row, 1, "Line offset", "(km/s)")
-        row = self._add_kin_rows(row, 2, "Line width", "(km/s)")
+        row = self._add_kin_rows(row, 1, "Line offset", "(km/s)", 0)
+        row = self._add_kin_rows(row, 2, "Line width", "(km/s)", 1)
         for iline in range(st.Nlines):
-            par = iline + 3
-            row = self._add_line_rows(row, par, iline)
+            row = self._add_line_rows(row, iline + 3, iline)
+        self.grid.setRowStretch(row, 1)
+        self.grid.setColumnStretch(len(self.COLS), 1)
         table = QWidget()
         table.setLayout(self.grid)
-        outer.addWidget(table)
-        outer.addStretch(1)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setWidget(central)
-        self.setCentralWidget(scroll)
-
-        # ---------------- fitting controls: a separate widget embedded in the main window
-        self.controls = QWidget()
-        ctl = QVBoxLayout(self.controls)
-        ctl.setContentsMargins(4, 2, 4, 2)
-        ctl.setSpacing(2)
-
-        # ---------------- chisq / flag / autoflag thresholds
-        fr = QHBoxLayout()
-        fr.addWidget(QLabel("Red-chi-sq:"))
-        self.lbl_chisq = QLabel("0.0000")
-        self.lbl_chisq.setMinimumWidth(70)
-        fr.addWidget(self.lbl_chisq)
-        fr.addWidget(QLabel("image:"))
-        self.rb_chisq = QRadioButton()
-        self.image_group.addButton(self.rb_chisq)
-        self.rb_chisq.clicked.connect(lambda: self.ctl.linefit_action("IMAGECHISQ"))
-        fr.addWidget(self.rb_chisq)
-        fr.addSpacing(16)
-        fr.addWidget(QLabel("Flag:"))
-        self.btn_flag = QPushButton("OK")
-        self.btn_flag.setFixedWidth(60)
-        self.btn_flag.setToolTip("Toggle fit status good or bad")
-        self.btn_flag.clicked.connect(lambda: self.ctl.linefit_action("FLAG"))
-        fr.addWidget(self.btn_flag)
-        fr.addWidget(QLabel("image:"))
-        self.rb_flag = QRadioButton()
-        self.image_group.addButton(self.rb_flag)
-        self.rb_flag.clicked.connect(lambda: self.ctl.linefit_action("IMAGEFLAG"))
-        fr.addWidget(self.rb_flag)
-        fr.addSpacing(16)
-        fr.addWidget(QLabel("Autoflag S/N thresh:"))
-        self.edit_snthresh = _edit(64, f"{st.mask_sn_thresh:.2f}")
-        self.edit_snthresh.editingFinished.connect(lambda: self._text("MASKSNTHRESH", self.edit_snthresh))
-        fr.addWidget(self.edit_snthresh)
-        fr.addWidget(QLabel("Max Vel/Sig error (km/s):"))
-        self.edit_maxvelerr = _edit(64, f"{st.mask_maxvelerr:.2f}")
-        self.edit_maxvelerr.editingFinished.connect(lambda: self._text("MASKMAXVELERR", self.edit_maxvelerr))
-        fr.addWidget(self.edit_maxvelerr)
-        fr.addStretch(1)
-        ctl.addLayout(fr)
-        ctl.addWidget(_hline())
-
-        # ---------------- fitting range / continuum
-        cr = QGridLayout()
-        cr.addWidget(QLabel("Fitting Range (l/r side, Å)"), 0, 0, 1, 2)
-        cr.addWidget(QLabel("Continuum Fit:"), 0, 2)
-        cr.addWidget(QLabel("Range of Offset (min/max, Å)"), 0, 3, 1, 2)
-        cr.addWidget(QLabel("Range of Percentiles included"), 0, 5, 1, 2)
-        cr.addWidget(QLabel("Poly. Order"), 0, 7)
-        self.edit_maxwoffb = _edit(64)
-        self.edit_maxwoffr = _edit(64)
-        self.cb_contmode = QCheckBox("MPFIT CONT")
-        self.cb_contmode.clicked.connect(lambda: self.ctl.linefit_action("CONTMODE"))
-        self.edit_cminoff, self.edit_cmaxoff = _edit(64), _edit(64)
-        self.edit_cminperc, self.edit_cmaxperc = _edit(64), _edit(64)
-        self.edit_corder = _edit(40)
-        for e, code in ((self.edit_maxwoffb, "LINEFITMAXOFFB"), (self.edit_maxwoffr, "LINEFITMAXOFFR"),
-                        (self.edit_cminoff, "CONTMINOFF"), (self.edit_cmaxoff, "CONTMAXOFF"),
-                        (self.edit_cminperc, "CONTMINPERC"), (self.edit_cmaxperc, "CONTMAXPERC"),
-                        (self.edit_corder, "CONTORDER")):
-            e.editingFinished.connect(lambda c=code, ee=e: self._text(c, ee))
-        cr.addWidget(self.edit_maxwoffb, 1, 0)
-        cr.addWidget(self.edit_maxwoffr, 1, 1)
-        cr.addWidget(self.cb_contmode, 1, 2)
-        cr.addWidget(self.edit_cminoff, 1, 3)
-        cr.addWidget(self.edit_cmaxoff, 1, 4)
-        cr.addWidget(self.edit_cminperc, 1, 5)
-        cr.addWidget(self.edit_cmaxperc, 1, 6)
-        cr.addWidget(self.edit_corder, 1, 7)
-        cr.setColumnStretch(8, 1)
-        ctl.addLayout(cr)
-        ctl.addWidget(_hline())
-
-        # ---------------- fit options
-        op = QHBoxLayout()
-        self.lbl_constr = QLabel("Fit with constraints?")
-        op.addWidget(self.lbl_constr)
-        self.cb_constr = QCheckBox()
-        self.cb_constr.clicked.connect(lambda: self.ctl.linefit_action("FITCONSTRAINTS"))
-        op.addWidget(self.cb_constr)
-        self.edit_momthresh = _edit(64, f"{st.mom_thresh:.2f}")
-        self.edit_momthresh.editingFinished.connect(lambda: self._text("MOMTHRESH", self.edit_momthresh))
-        op.addWidget(self.edit_momthresh)
-        op.addSpacing(12)
-        self.lbl_fixratios = QLabel("Fix line ratios?")
-        op.addWidget(self.lbl_fixratios)
-        self.cb_fixratios = QCheckBox()
-        self.cb_fixratios.clicked.connect(lambda: self.ctl.linefit_action("FIXRATIOS"))
-        op.addWidget(self.cb_fixratios)
-        op.addSpacing(12)
-        self.lbl_second = QLabel("2nd component:")
-        op.addWidget(self.lbl_second)
-        self.rb_second = [QRadioButton("FAINTER"), QRadioButton("LARGER OFFSET"), QRadioButton("LARGER WIDTH")]
-        self.second_group = QButtonGroup(self)
-        for i, (rb, code) in enumerate(zip(self.rb_second, ("FREE_2ND", "HIVEL_2ND", "BROAD_2ND"))):
-            self.second_group.addButton(rb, i)
-            rb.clicked.connect(lambda _=False, c=code: self.ctl.linefit_action(c))
-            op.addWidget(rb)
-        self.lbl_smart = QLabel("Smart?")
-        op.addWidget(self.lbl_smart)
-        self.cb_smart = QCheckBox()
-        self.cb_smart.clicked.connect(lambda: self.ctl.linefit_action("SMART_2ND"))
-        op.addWidget(self.cb_smart)
-        op.addStretch(1)
-        ctl.addLayout(op)
-
-        st2 = QHBoxLayout()
-        st2.addWidget(QLabel("Montecarlo PDFs plot/save:"))
-        self.lbl_mcplot = QLabel("OFF")
-        st2.addWidget(self.lbl_mcplot)
-        st2.addWidget(QLabel("/"))
-        self.lbl_mcsave = QLabel("OFF")
-        st2.addWidget(self.lbl_mcsave)
-        st2.addSpacing(12)
-        st2.addWidget(QLabel("Montecarlo noise:"))
-        self.lbl_mcnoise = QLabel("OFF")
-        st2.addWidget(self.lbl_mcnoise)
-        st2.addSpacing(12)
-        st2.addWidget(QLabel("Scale Noisecube error:"))
-        self.lbl_scnoise = QLabel("OFF")
-        st2.addWidget(self.lbl_scnoise)
-        st2.addSpacing(12)
-        st2.addWidget(QLabel("Input Startvals File:"))
-        self.lbl_inputmap = QLabel("OFF")
-        st2.addWidget(self.lbl_inputmap)
-        st2.addStretch(1)
-        ctl.addLayout(st2)
-        ctl.addWidget(_hline())
-
-        # ---------------- instrumental resolution
-        ir = QHBoxLayout()
-        ir.addWidget(QLabel("Compute Instrumental Resolution:"))
-        b = QPushButton("FIT TO VARIANCE")
-        b.setToolTip("Fit to lines in variance spectrum")
-        b.clicked.connect(lambda: self.ctl.linefit_action("FITSKY"))
-        ir.addWidget(b)
-        self.btn_poly = QPushButton("USE POLYNOMIAL")
-        self.btn_poly.setToolTip("Use the polynomial from the header / archive / instrument manual")
-        self.btn_poly.clicked.connect(lambda: self.ctl.linefit_action("POLYSKY"))
-        ir.addWidget(self.btn_poly)
-        self.btn_tpl = QPushButton("USE TEMPLATES")
-        self.btn_tpl.setEnabled(st.instrres_tplsig > 0)
-        self.btn_tpl.clicked.connect(lambda: self.ctl.linefit_action("TPLSKY"))
-        ir.addWidget(self.btn_tpl)
-        ir.addSpacing(12)
-        ir.addWidget(QLabel("R (at main line):"))
-        self.lbl_instrres = QLabel("")
-        self.lbl_instrres.setMinimumWidth(70)
-        ir.addWidget(self.lbl_instrres)
-        self.lbl_instrres_mode = QLabel("")
-        ir.addWidget(self.lbl_instrres_mode)
-        ir.addStretch(1)
-        ctl.addLayout(ir)
-        ir2 = QHBoxLayout()
-        ir2.addWidget(QLabel("Polynomial coefficients:"))
-        self.edit_coeff = []
-        for i in range(st.max_polycoeff_instrres + 1):
-            e = _edit(110)
-            e.editingFinished.connect(lambda i=i, ee=e: self._text(f"POLYCOEFFPAR{i}", ee))
-            self.edit_coeff.append(e)
-            ir2.addWidget(e)
-        ir2.addStretch(1)
-        ctl.addLayout(ir2)
-        ctl.addWidget(_hline())
-
-        # ---------------- action buttons
-        b1 = QHBoxLayout()
-        for text, code, tip in (("FIT", "FIT", "Fit lines"), ("FIT ADJ", "FITADJ", "Fit using adjacent spaxels as initial guess"),
-                                ("RESET FIT", "RESETFIT", "Reset fit results"), (None, None, None),
-                                ("AUTO FLAG", "FLAGALL", "Auto-Flag all masks / spaxels"), (None, None, None),
-                                ("RESET ALL PARS", "RESETALL", "Reset all parameters (fit, user, settings)"),
-                                ("RESET USER PARS", "RESETUSER", "Reset user defined constraints")):
-            if text is None:
-                b1.addSpacing(30)
-                continue
-            btn = QPushButton(text)
-            btn.setToolTip(tip)
-            btn.clicked.connect(lambda _=False, c=code: self.ctl.linefit_action(c))
-            b1.addWidget(btn)
-        b1.addStretch(1)
-        ctl.addLayout(b1)
-        b2 = QHBoxLayout()
-        for text, code, tip in (("FIT ALL", "FITALL", "Fit all masks / spaxels"),
-                                ("FIT ADJ ALL", "FITADJALL", "Fit bad spaxels using initial guess from adjacent spaxels"),
-                                ("RESET FIT ALL", "RESETFITALL", "Reset fit results"), (None, None, None),
-                                ("FLAG ON/OFF", "RESIMAMASK", "Switch masking of results on/off"), (None, None, None),
-                                ("SAVE", "SAVE", "Save fit results in FITS format"),
-                                ("MASK/SPAXEL", "MODE", "Switch MASK/SPAXEL fitting modes"),
-                                ("GAUSS/MOMENTS", "TYPE", "Switch GAUSSIAN/MOMENTS fitting types")):
-            if text is None:
-                b2.addSpacing(30)
-                continue
-            btn = QPushButton(text)
-            btn.setToolTip(tip)
-            btn.clicked.connect(lambda _=False, c=code: self.ctl.linefit_action(c))
-            b2.addWidget(btn)
-        b2.addStretch(1)
-        ctl.addLayout(b2)
-        ctl.addStretch(1)
+        scroll.setWidget(table)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        outer.addWidget(scroll, stretch=1)
         self._building = False
-        nrows = 4 + 3 * st.Nlines
-        self.resize(1120, min(90 + 30 * nrows, 900))
-        self.typeswitch()
-        self.update_all(update_userpars=True)
+        self._toggle_second_rows(self.cb_second.isChecked())
+        return outer_widget
 
-    def _add_param_row(self, row, label, lt, par, comp_text, with_fit_show=True, is_cont=False):
+    def _add_band(self, row, nrows, group):
+        band = QFrame()
+        band.setStyleSheet(f"background-color: {self._BANDS[group % 2]}; border-radius: 3px;")
+        band.setAutoFillBackground(True)
+        self.grid.addWidget(band, row, 0, nrows, len(self.COLS))
+        band.lower()
+        return band
+
+    def _add_param_row(self, row, label, lt, par, comp_text, with_fit_show=True, cont_par=None):
         d = {}
-        lbl0 = QLabel(label)
-        lbl0.setStyleSheet("font-weight: bold" if lt == "N" else "")
-        self.grid.addWidget(lbl0, row, 0)
+        code = f"{lt}{par}"
+        d["label"] = QLabel(label)
+        d["label"].setStyleSheet("font-weight: bold")
+        self.grid.addWidget(d["label"], row, 0)
         d["comp"] = QLabel(comp_text)
         self.grid.addWidget(d["comp"], row, 1)
-        d["lamb"] = QLabel("")
+        d["lamb"] = _mono_label("", 64)
         self.grid.addWidget(d["lamb"], row, 2)
-        code = f"{lt}{par}"
-        if not is_cont:
-            d["start"] = _edit(70)
-            d["start"].editingFinished.connect(lambda c="SP" + code, e=d["start"]: self._text(c, e))
-            self.grid.addWidget(d["start"], row, 3)
-        d["best"] = QLabel("Not Fit")
-        d["best"].setMinimumWidth(150)
+        d["start"] = _edit(62, tip="Start value (empty = automatic guess)")
+        d["start"].editingFinished.connect(lambda c="SP" + code, e=d["start"]: self._text(c, e))
+        self.grid.addWidget(d["start"], row, 3)
+        d["best"] = _mono_label("Not Fit", 170)
         self.grid.addWidget(d["best"], row, 4)
-        if not is_cont:
-            d["min"] = _edit(64)
-            d["max"] = _edit(64)
-            d["min"].editingFinished.connect(lambda c="MINP" + code, e=d["min"]: self._text(c, e))
-            d["max"].editingFinished.connect(lambda c="MAXP" + code, e=d["max"]: self._text(c, e))
-            self.grid.addWidget(d["min"], row, 5)
-            self.grid.addWidget(d["max"], row, 6)
-            d["fix"] = QCheckBox()
-            d["fix"].clicked.connect(lambda _=False, c="FIX" + code: self.ctl.linefit_action(c))
-            self.grid.addWidget(d["fix"], row, 7, alignment=Qt.AlignmentFlag.AlignCenter)
-            d["reset"] = QPushButton("x")
-            d["reset"].setFixedWidth(26)
-            d["reset"].setToolTip("Reset this parameter")
-            d["reset"].clicked.connect(lambda _=False, c="RESET" + code: self.ctl.linefit_action(c))
-            self.grid.addWidget(d["reset"], row, 8, alignment=Qt.AlignmentFlag.AlignCenter)
+        d["min"] = _edit(58, tip="Lower limit (used when 'Fit with constraints' is on)")
+        d["max"] = _edit(58, tip="Upper limit (used when 'Fit with constraints' is on)")
+        d["min"].editingFinished.connect(lambda c="MINP" + code, e=d["min"]: self._text(c, e))
+        d["max"].editingFinished.connect(lambda c="MAXP" + code, e=d["max"]: self._text(c, e))
+        self.grid.addWidget(d["min"], row, 5)
+        self.grid.addWidget(d["max"], row, 6)
+        d["fix"] = QCheckBox()
+        d["fix"].setToolTip("Keep this parameter fixed at its start value")
+        d["fix"].clicked.connect(lambda _=False, c="FIX" + code: self.ctl.linefit_action(c))
+        self.grid.addWidget(d["fix"], row, 7, alignment=Qt.AlignmentFlag.AlignCenter)
+        d["reset"] = QToolButton()
+        d["reset"].setText("×")
+        d["reset"].setToolTip("Reset this parameter's result")
+        d["reset"].clicked.connect(lambda _=False, c="RESET" + code: self.ctl.linefit_action(c))
+        self.grid.addWidget(d["reset"], row, 8, alignment=Qt.AlignmentFlag.AlignCenter)
         d["image"] = QRadioButton()
         d["image"].setToolTip("Show this parameter as a map in the spaxel viewer")
         self.image_group.addButton(d["image"])
@@ -363,44 +231,256 @@ class LinefitWindow(QMainWindow):
         self.grid.addWidget(d["image"], row, 9, alignment=Qt.AlignmentFlag.AlignCenter)
         if with_fit_show:
             d["fit"] = QCheckBox()
+            d["fit"].setToolTip("Fit this component")
             d["fit"].clicked.connect(lambda _=False, c="FIT" + code: self.ctl.linefit_action(c))
             self.grid.addWidget(d["fit"], row, 10, alignment=Qt.AlignmentFlag.AlignCenter)
             d["show"] = QCheckBox()
+            d["show"].setToolTip("Overplot this component on the spectrum")
             d["show"].clicked.connect(lambda _=False, c="SHOW" + code: self.ctl.linefit_action(c))
             self.grid.addWidget(d["show"], row, 11, alignment=Qt.AlignmentFlag.AlignCenter)
         self.w[(lt, par)] = d
+        if cont_par is not None:
+            c = {}
+            ccode = f"C{cont_par}"
+            c["best"] = _mono_label("Not Fit", 150)
+            self.grid.addWidget(c["best"], row, 12)
+            c["image"] = QRadioButton()
+            c["image"].setToolTip("Show the continuum at this line as a map")
+            self.image_group.addButton(c["image"])
+            c["image"].clicked.connect(lambda _=False, cc="IMAGE" + ccode: self.ctl.linefit_action(cc))
+            self.grid.addWidget(c["image"], row, 13, alignment=Qt.AlignmentFlag.AlignCenter)
+            c["fit"] = QCheckBox()
+            c["fit"].setToolTip("Fit the continuum for this lineset")
+            c["fit"].clicked.connect(lambda _=False, cc="FIT" + ccode: self.ctl.linefit_action(cc))
+            self.grid.addWidget(c["fit"], row, 14, alignment=Qt.AlignmentFlag.AlignCenter)
+            c["show"] = QCheckBox()
+            c["show"].setToolTip("Add the continuum to the overplotted components")
+            c["show"].clicked.connect(lambda _=False, cc="SHOW" + ccode: self.ctl.linefit_action(cc))
+            self.grid.addWidget(c["show"], row, 15, alignment=Qt.AlignmentFlag.AlignCenter)
+            self.w[("C", cont_par)] = c
         return row + 1
 
-    _BANDS = ("#f4f4f4", "#dcdcdc")
-
-    def _add_band(self, row, nrows, group):
-        """Grey background band behind ``nrows`` grid rows (alternating per transition)."""
-        band = QFrame()
-        band.setStyleSheet(f"background-color: {self._BANDS[group % 2]}; border-radius: 3px;")
-        band.setAutoFillBackground(True)
-        self.grid.addWidget(band, row, 0, nrows, len(self.COLS))
-        band.lower()
-
-    def _add_kin_rows(self, row, par, label, unit):
-        self._add_band(row, 2, par - 1)
-        row = self._add_param_row(row, label, "N", par, "Narrow", with_fit_show=False)
-        row = self._add_param_row(row, unit, "B", par, "Broad", with_fit_show=False)
+    def _add_kin_rows(self, row, par, label, unit, group):
+        band = self._add_band(row, 2, group)
+        r0 = row
+        row = self._add_param_row(row, label, "N", par, "1st", with_fit_show=False)
+        row = self._add_param_row(row, unit, "B", par, "2nd", with_fit_show=False)
+        self.second_rows.append(([self.w[("B", par)]], band, r0))
         return row
 
     def _add_line_rows(self, row, par, iline):
-        self._add_band(row, 3, iline)
+        band = self._add_band(row, 2, iline)
+        r0 = row
         name = self.state.linefancynames[iline]
-        row = self._add_param_row(row, name, "N", par, "Narrow")
-        row = self._add_param_row(row, "", "B", par, "Broad")
-        row = self._add_param_row(row, "", "C", par, "Continuum", is_cont=True)
+        row = self._add_param_row(row, name, "N", par, "1st", cont_par=par)
+        row = self._add_param_row(row, "", "B", par, "2nd")
+        self.second_rows.append(([self.w[("B", par)]], band, r0))
         return row
+
+    def _toggle_second_rows(self, on: bool):
+        for dicts, band, r0 in self.second_rows:
+            for d in dicts:
+                for wdg in d.values():
+                    wdg.setVisible(on)
+            self.grid.removeWidget(band)
+            self.grid.addWidget(band, r0, 0, 2 if on else 1, len(self.COLS))
+            band.lower()
+
+    # ================================================================== controls
+    def _build_controls(self) -> QWidget:
+        self._building = True
+        st = self.state
+        panel = QWidget()
+        lay = QVBoxLayout(panel)
+        lay.setContentsMargins(4, 2, 4, 2)
+        lay.setSpacing(2)
+
+        # ---- Fit setup
+        setup = QWidget()
+        g = QGridLayout(setup)
+        g.setContentsMargins(6, 2, 6, 4)
+        g.setHorizontalSpacing(8)
+        g.addWidget(QLabel("Fit range blue / red (Å)"), 0, 0)
+        self.edit_maxwoffb, self.edit_maxwoffr = _edit(62), _edit(62)
+        rr = QHBoxLayout()
+        rr.addWidget(self.edit_maxwoffb)
+        rr.addWidget(self.edit_maxwoffr)
+        rr.addStretch(1)
+        g.addLayout(rr, 0, 1)
+        self.cb_contmode = QCheckBox("Fit continuum with the lines (MPFIT CONT)")
+        self.cb_contmode.setToolTip("Off: continuum from side bands, subtracted before the fit. "
+                                    "On: a constant fitted together with the lines")
+        self.cb_contmode.clicked.connect(lambda: self.ctl.linefit_action("CONTMODE"))
+        g.addWidget(self.cb_contmode, 0, 2, 1, 2)
+        g.addWidget(QLabel("Side bands offset min / max (Å)"), 1, 0)
+        self.edit_cminoff, self.edit_cmaxoff = _edit(62), _edit(62)
+        rr = QHBoxLayout()
+        rr.addWidget(self.edit_cminoff)
+        rr.addWidget(self.edit_cmaxoff)
+        rr.addStretch(1)
+        g.addLayout(rr, 1, 1)
+        g.addWidget(QLabel("Percentiles min / max, order"), 1, 2)
+        self.edit_cminperc, self.edit_cmaxperc = _edit(52), _edit(52)
+        self.edit_corder = _edit(34)
+        rr = QHBoxLayout()
+        rr.addWidget(self.edit_cminperc)
+        rr.addWidget(self.edit_cmaxperc)
+        rr.addWidget(self.edit_corder)
+        rr.addStretch(1)
+        g.addLayout(rr, 1, 3)
+        g.addWidget(QLabel("Autoflag S/N threshold"), 2, 0)
+        self.edit_snthresh = _edit(62)
+        g.addWidget(self.edit_snthresh, 2, 1)
+        g.addWidget(QLabel("Max velocity / dispersion error (km/s)"), 2, 2)
+        self.edit_maxvelerr = _edit(62)
+        g.addWidget(self.edit_maxvelerr, 2, 3)
+        g.setColumnStretch(4, 1)
+        for e, code in ((self.edit_maxwoffb, "LINEFITMAXOFFB"), (self.edit_maxwoffr, "LINEFITMAXOFFR"),
+                        (self.edit_cminoff, "CONTMINOFF"), (self.edit_cmaxoff, "CONTMAXOFF"),
+                        (self.edit_cminperc, "CONTMINPERC"), (self.edit_cmaxperc, "CONTMAXPERC"),
+                        (self.edit_corder, "CONTORDER"), (self.edit_snthresh, "MASKSNTHRESH"),
+                        (self.edit_maxvelerr, "MASKMAXVELERR")):
+            e.setPlaceholderText("")
+            e.editingFinished.connect(lambda c=code, ee=e: self._text(c, ee))
+        lay.addWidget(Collapsible("Fit setup", setup, expanded=True))
+
+        # ---- Options
+        opts = QWidget()
+        g = QGridLayout(opts)
+        g.setContentsMargins(6, 2, 6, 4)
+        r1 = QHBoxLayout()
+        self.cb_constr = QCheckBox("Fit with constraints")
+        self.cb_constr.setToolTip("Use the user start values and min/max limits of the table")
+        self.cb_constr.clicked.connect(lambda: self.ctl.linefit_action("FITCONSTRAINTS"))
+        r1.addWidget(self.cb_constr)
+        self.lbl_momthresh = QLabel("Moments threshold")
+        self.edit_momthresh = _edit(62)
+        self.edit_momthresh.setPlaceholderText("")
+        self.edit_momthresh.editingFinished.connect(lambda: self._text("MOMTHRESH", self.edit_momthresh))
+        r1.addWidget(self.lbl_momthresh)
+        r1.addWidget(self.edit_momthresh)
+        self.cb_fixratios = QCheckBox("Fix line ratios ([NII], [OIII], [OI])")
+        self.cb_fixratios.clicked.connect(lambda: self.ctl.linefit_action("FIXRATIOS"))
+        r1.addWidget(self.cb_fixratios)
+        r1.addSpacing(12)
+        self.lbl_second = QLabel("2nd component:")
+        r1.addWidget(self.lbl_second)
+        self.rb_second = [QRadioButton("fainter"), QRadioButton("larger offset"), QRadioButton("larger width")]
+        self.second_group = QButtonGroup()
+        for i, (rb, code) in enumerate(zip(self.rb_second, ("FREE_2ND", "HIVEL_2ND", "BROAD_2ND"))):
+            self.second_group.addButton(rb, i)
+            rb.clicked.connect(lambda _=False, c=code: self.ctl.linefit_action(c))
+            r1.addWidget(rb)
+        self.cb_smart = QCheckBox("smart")
+        self.cb_smart.setToolTip("Keep the 2nd component only when two kinematic components are really present")
+        self.cb_smart.clicked.connect(lambda: self.ctl.linefit_action("SMART_2ND"))
+        r1.addWidget(self.cb_smart)
+        r1.addStretch(1)
+        g.addLayout(r1, 0, 0)
+        r2 = QHBoxLayout()
+        r2.addWidget(QLabel("Instrumental resolution:"))
+        b = QPushButton("Fit sky lines")
+        b.setToolTip("Fit the sky lines in the variance cube")
+        b.clicked.connect(lambda: self.ctl.linefit_action("FITSKY"))
+        r2.addWidget(b)
+        self.btn_poly = QPushButton("Use polynomial")
+        self.btn_poly.setToolTip("Polynomial from the header / archive / instrument manual")
+        self.btn_poly.clicked.connect(lambda: self.ctl.linefit_action("POLYSKY"))
+        r2.addWidget(self.btn_poly)
+        self.btn_tpl = QPushButton("Use templates")
+        self.btn_tpl.clicked.connect(lambda: self.ctl.linefit_action("TPLSKY"))
+        r2.addWidget(self.btn_tpl)
+        r2.addSpacing(8)
+        r2.addWidget(QLabel("R(main line) ="))
+        self.lbl_instrres = _mono_label("", 70, align_right=False)
+        r2.addWidget(self.lbl_instrres)
+        self.lbl_instrres_mode = QLabel("")
+        r2.addWidget(self.lbl_instrres_mode)
+        r2.addStretch(1)
+        g.addLayout(r2, 1, 0)
+        r3 = QHBoxLayout()
+        r3.addWidget(QLabel("Polynomial coefficients:"))
+        self.edit_coeff = []
+        for i in range(st.max_polycoeff_instrres + 1):
+            e = _edit(100)
+            e.setPlaceholderText("")
+            e.editingFinished.connect(lambda i=i, ee=e: self._text(f"POLYCOEFFPAR{i}", ee))
+            self.edit_coeff.append(e)
+            r3.addWidget(e)
+        r3.addStretch(1)
+        g.addLayout(r3, 2, 0)
+        lay.addWidget(Collapsible("Options", opts, expanded=False))
+
+        # ---- Status
+        status = QWidget()
+        g = QHBoxLayout(status)
+        g.setContentsMargins(6, 2, 6, 4)
+        g.addWidget(QLabel("Errors:"))
+        self.lbl_errmethod = QLabel("")
+        g.addWidget(self.lbl_errmethod)
+        g.addSpacing(10)
+        g.addWidget(QLabel("χ²/dof"))
+        self.lbl_chisq = _mono_label("0.0000", 70, align_right=False)
+        g.addWidget(self.lbl_chisq)
+        self.rb_chisq = QRadioButton("map")
+        self.image_group.addButton(self.rb_chisq)
+        self.rb_chisq.clicked.connect(lambda: self.ctl.linefit_action("IMAGECHISQ"))
+        g.addWidget(self.rb_chisq)
+        g.addSpacing(10)
+        g.addWidget(QLabel("Flag"))
+        self.btn_flag = QPushButton("OK")
+        self.btn_flag.setFixedWidth(54)
+        self.btn_flag.setToolTip("Toggle the fit quality flag of this spaxel / mask")
+        self.btn_flag.clicked.connect(lambda: self.ctl.linefit_action("FLAG"))
+        g.addWidget(self.btn_flag)
+        self.rb_flag = QRadioButton("map")
+        self.image_group.addButton(self.rb_flag)
+        self.rb_flag.clicked.connect(lambda: self.ctl.linefit_action("IMAGEFLAG"))
+        g.addWidget(self.rb_flag)
+        g.addSpacing(10)
+        self.lbl_mc = QLabel("")
+        g.addWidget(self.lbl_mc)
+        g.addStretch(1)
+        lay.addWidget(Collapsible("Status", status, expanded=True))
+
+        # ---- actions (always visible)
+        for spec in (
+            (("FIT", "FIT", "Fit the current spaxel / mask"),
+             ("FIT ADJ", "FITADJ", "Fit using the neighbours as initial guess"),
+             ("RESET FIT", "RESETFIT", "Reset the fit of this spaxel / mask"), None,
+             ("AUTO FLAG", "FLAGALL", "Flag all spaxels / masks"), None,
+             ("RESET ALL PARS", "RESETALL", "Reset fit, user values and settings"),
+             ("RESET USER PARS", "RESETUSER", "Reset user start values and limits")),
+            (("FIT ALL", "FITALL", "Fit all spaxels in the FITALL range (or all masks)"),
+             ("FIT ADJ ALL", "FITADJALL", "Refit bad spaxels next to good ones, iteratively"),
+             ("RESET FIT ALL", "RESETFITALL", "Reset all fits"), None,
+             ("FLAG ON/OFF", "RESIMAMASK", "Show flagged spaxels in the result maps or hide them"), None,
+             ("SAVE", "SAVE", "Save the results as FITS"),
+             ("MASK/SPAXEL", "MODE", "Switch mask / spaxel fitting"),
+             ("GAUSS/MOMENTS", "TYPE", "Switch Gaussian fits / moments"))):
+            row = QHBoxLayout()
+            row.setSpacing(4)
+            for item in spec:
+                if item is None:
+                    row.addSpacing(18)
+                    continue
+                text, code, tip = item
+                btn = QPushButton(text)
+                btn.setToolTip(tip)
+                btn.clicked.connect(lambda _=False, c=code: self.ctl.linefit_action(c))
+                row.addWidget(btn)
+            row.addStretch(1)
+            lay.addLayout(row)
+        lay.addStretch(1)
+        self._building = False
+        return panel
 
     # ================================================================== events
     def _text(self, code, edit):
         if self._building:
             return
         txt = edit.text().strip()
-        if txt.lower() in ("not set", ""):
+        if txt.lower() in ("not set", "", "auto"):
             val = NOT_FIT
         else:
             try:
@@ -413,38 +493,30 @@ class LinefitWindow(QMainWindow):
 
     # ================================================================== refresh
     def typeswitch(self):
-        """Relabel the window for Gaussian or moments fitting (``kubeviz_linefit_typeswitch``)."""
         st = self.state
         gauss = st.linefit_type == FIT_GAUSS
         self.lbl_type.setText("GAUSS" if gauss else "MOMENTS")
-        if gauss:
-            first, second = {0: ("1st Comp.", "2nd Comp."), 1: ("Blue", "Red"), 2: ("Narrow", "Broad")}[st.secondcomp_mode]
+        first, second = {0: ("1st", "2nd"), 1: ("blue", "red"), 2: ("narrow", "broad")}[int(st.secondcomp_mode)]
         for (lt, par), d in self.w.items():
             if lt == "N":
-                d["comp"].setText((first if gauss else ("Main Line" if par <= 2 else "Flux")))
+                d["comp"].setText(first if gauss else ("main" if par <= 2 else "flux"))
             elif lt == "B":
-                d["comp"].setText((second if gauss else ("" if par <= 2 else "1st/2nd")))
+                d["comp"].setText(second if gauss else ("" if par <= 2 else "1st/2nd"))
             for key in ("start", "min", "max", "fix"):
                 if key in d:
-                    d[key].setVisible(gauss)
-            if lt == "B" and "image" in d:
-                d["image"].setVisible(gauss)
-        for j, name in enumerate(self.COLS):
-            if j in (3, 5, 6, 7, 8):
-                self.col_labels[j].setText(name if gauss else "")
-        self.lbl_constr.setText("Fit with constraints?" if gauss else "Moments thresh:")
+                    d[key].setEnabled(gauss)
+        for j in (3, 5, 6, 7, 8):
+            self.col_labels[j].setText(self.COLS[j] if gauss else "")
         self.cb_constr.setVisible(gauss)
+        self.lbl_momthresh.setVisible(not gauss)
         self.edit_momthresh.setVisible(not gauss)
-        self.lbl_fixratios.setVisible(gauss)
         self.cb_fixratios.setVisible(gauss)
         self.lbl_second.setVisible(gauss)
         for rb in self.rb_second:
             rb.setVisible(gauss)
-        self.lbl_smart.setVisible(gauss)
         self.cb_smart.setVisible(gauss)
 
     def update_all(self, update_userpars: bool = False):
-        """Port of ``kubeviz_linefit_update``."""
         st = self.state
         self._building = True
         try:
@@ -453,14 +525,12 @@ class LinefitWindow(QMainWindow):
                 idx = rs.index(col=st.col, row=st.row)
                 self.lbl_mode.setText("SPAXEL")
                 self.lbl_sel.setText(f"[{st.col},{st.row}]")
-                chisq = f"{rs.chisq[idx]:.4f}"
                 self.btn_prevmask.setVisible(False)
                 self.btn_nextmask.setVisible(False)
             else:
                 idx = rs.index(imask=st.imask)
                 self.lbl_mode.setText("MASK")
                 self.lbl_sel.setText(f"{st.imask}/{st.Nmask}")
-                chisq = f"{rs.chisq[idx]:.4f}"
                 self.btn_prevmask.setVisible(True)
                 self.btn_nextmask.setVisible(True)
             n, b, c, m = rs.n[idx], rs.b[idx], rs.c[idx], rs.m[idx]
@@ -473,9 +543,8 @@ class LinefitWindow(QMainWindow):
                     self.w[("N", par)]["best"].setText(utils.resultsstring(n[par], nerr[par, :2]))
                     self.w[("B", par)]["best"].setText(utils.resultsstring(b[par], berr[par, :2]))
                     if par >= 3:
-                        cpar = par - 2
-                        self.w[("C", par)]["best"].setText(_cont_string(c[cpar], cerr[cpar, :2]))
-                self.lbl_chisq.setText(chisq)
+                        self.w[("C", par)]["best"].setText(_cont_string(c[par - 2], cerr[par - 2, :2]))
+                self.lbl_chisq.setText(f"{rs.chisq[idx]:.4f}")
             else:
                 flag = 0
                 if st.Nlines > 0:
@@ -485,11 +554,11 @@ class LinefitWindow(QMainWindow):
                         self.w[("N", par)]["best"].setText(utils.resultsstring(m[6 * mi + par], merr[6 * mi + par, :2]))
                         self.w[("B", par)]["best"].setText("")
                     for iline in range(st.Nlines):
-                        rp, par, cpar = 6 * iline, iline + 3, iline + 1
+                        rp, par = 6 * iline, iline + 3
                         self.w[("N", par)]["best"].setText(utils.resultsstring(m[rp], merr[rp, :2]))
                         self.w[("B", par)]["lamb"].setText(utils.resultsstring(m[rp + 1], merr[rp + 1, :2]))
                         self.w[("B", par)]["best"].setText(utils.resultsstring(m[rp + 2], merr[rp + 2, :2]))
-                        self.w[("C", par)]["best"].setText(_cont_string(c[cpar], cerr[cpar, :2]))
+                        self.w[("C", par)]["best"].setText(_cont_string(c[iline + 1], cerr[iline + 1, :2]))
                 self.lbl_chisq.setText("--")
             for iline in range(st.Nlines):
                 par = iline + 3
@@ -504,15 +573,14 @@ class LinefitWindow(QMainWindow):
 
             self.edit_z.setText(f"{st.redshift:.6f}")
             R = float(st.getinstrres()) if st.Nlines > 0 else 0.0
-            self.lbl_instrres.setText(f"{R:.2f}")
+            self.lbl_instrres.setText(f"{R:.1f}")
             self.lbl_instrres_mode.setText(INSTRRES_MODE_TEXT.get(st.instrres_mode, ""))
             self.lbl_errmethod.setText(ERR_METHOD_NAMES.get(st.domontecarlo, ""))
-            onoff = lambda v: "ON" if v else "OFF"
-            self.lbl_mcplot.setText(onoff(st.plotMonteCarlodistrib))
-            self.lbl_mcsave.setText(onoff(st.saveMonteCarlodistrib))
-            self.lbl_mcnoise.setText(onoff(st.useMonteCarlonoise))
-            self.lbl_scnoise.setText(onoff(st.scaleNoiseerrors))
-            self.lbl_inputmap.setText(onoff(st.gauss_initmap is not None if gauss else st.mom_windowmap is not None))
+            onoff = lambda v: "on" if v else "off"  # noqa: E731
+            inmap = st.gauss_initmap is not None if gauss else st.mom_windowmap is not None
+            self.lbl_mc.setText(f"MC plots {onoff(st.plotMonteCarlodistrib)} · MC PDFs {onoff(st.saveMonteCarlodistrib)} · "
+                                f"MC noise {onoff(st.useMonteCarlonoise)} · scale errors {onoff(st.scaleNoiseerrors)} · "
+                                f"start-value maps {onoff(inmap)}")
             self.edit_maxwoffb.setText(f"{st.maxwoffb:.2f}")
             self.edit_maxwoffr.setText(f"{st.maxwoffr:.2f}")
             self.edit_momthresh.setText(f"{st.mom_thresh:.2f}")
@@ -526,7 +594,6 @@ class LinefitWindow(QMainWindow):
             self.edit_corder.setText(f"{int(st.continuumfit_order)}")
             self.btn_tpl.setEnabled(st.instrres_tplsig > 0)
 
-            # image radio
             self.image_group.setExclusive(False)
             for btn in self.image_group.buttons():
                 btn.setChecked(False)
@@ -564,6 +631,8 @@ class LinefitWindow(QMainWindow):
                 coeffs = st.instrres_varpoly if st.instrres_mode == INSTRRES_VARPOLY else st.instrres_extpoly
                 for i, e in enumerate(self.edit_coeff):
                     e.setText(f"{coeffs[i]:g}")
+                if np.any(st.pbdofit[:st.Nlines]) and not self.cb_second.isChecked():
+                    self.cb_second.setChecked(True)
         finally:
             self._building = False
 
@@ -572,20 +641,3 @@ class LinefitWindow(QMainWindow):
         self.btn_flag.setText("BAD" if bad else "OK")
         self.btn_flag.setStyleSheet("background-color: #e06060; color: white; font-weight: bold" if bad
                                     else "background-color: #60c060; color: white; font-weight: bold")
-
-    def closeEvent(self, ev):
-        self.state.linefitmap = False
-        ev.accept()
-
-    def detach_controls(self):
-        """Take the controls widget out of the main window before this window dies."""
-        self.controls.setParent(None)
-
-
-def _cont_string(value, err):
-    err = np.asarray(err, dtype=float)
-    if err[0] == NOT_FIT:
-        return "Not Fit"
-    if err[0] == -998:
-        return f"{value:.4f} +/- No Errors"
-    return f"{value:.4f}+{err[0]:.4f}/{err[1]:.4f}"
