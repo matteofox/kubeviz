@@ -154,13 +154,18 @@ def mpcurvefit(func, x, y, weights, p0, parinfo=None, itmax: int = 200, quiet: b
     dof = max(npts - nfree, 1)
     perror = np.zeros(npar)
     covar = None
+    # mpfit convention: parameters pegged at a limit are excluded from the covariance
+    # and get a zero error (their derivative is meaningless at the bound)
+    tol = 1e-9 * np.maximum(np.abs(res.x), 1.0)
+    pegged = (np.isfinite(lower) & (res.x <= lower + tol)) | (np.isfinite(upper) & (res.x >= upper - tol))
+    unpegged = np.flatnonzero(~pegged)
     try:
-        J = res.jac
+        J = res.jac[:, unpegged]
         JTJ = J.T @ J
         cov_free = np.linalg.pinv(JTJ)
-        perror[ifree] = np.sqrt(np.clip(np.diag(cov_free), 0, None))
+        perror[ifree[unpegged]] = np.sqrt(np.clip(np.diag(cov_free), 0, None))
         covar = np.zeros((npar, npar))
-        covar[np.ix_(ifree, ifree)] = cov_free
+        covar[np.ix_(ifree[unpegged], ifree[unpegged])] = cov_free
     except Exception:  # pragma: no cover
         perror[ifree] = 0.0
     if not np.all(np.isfinite(p)):
