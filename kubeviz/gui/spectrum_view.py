@@ -18,6 +18,15 @@ COL_TOTAL = (0, 170, 0)
 COL_CONT = (0, 0, 230)
 
 
+
+def step_edges(wave):
+    """Bin edges half way between wavelengths (for step plots); N+1 values for N pixels."""
+    x = np.asarray(wave, dtype=float)
+    if x.size < 2:
+        return x
+    mid = 0.5 * (x[:-1] + x[1:])
+    return np.concatenate([[x[0] - (mid[0] - x[0])], mid, [x[-1] + (x[-1] - mid[-1])]])
+
 class PixelAxis(pg.AxisItem):
     """Top axis of the zoom window labelled in pixel index (linear wavelength assumed)."""
 
@@ -82,10 +91,10 @@ class SpectrumView(QWidget):
             r.setZValue(-10)
             r.setVisible(False)
             self.plot.addItem(r)
-        self.curve = self.plot.plot([], [], pen=pg.mkPen(COL_DATA, width=1))
-        self.curve2 = self.plot.plot([], [], pen=pg.mkPen(COL_NOISE, width=1))
-        self.marker = pg.InfiniteLine(angle=90, pen=pg.mkPen(COL_MARKER, width=1))
-        self.startmarker = pg.InfiniteLine(angle=90, pen=pg.mkPen(COL_DATA, width=1))
+        self.curve = self.plot.plot([], [], pen=pg.mkPen(COL_DATA, width=1.5), stepMode="center")
+        self.curve2 = self.plot.plot([], [], pen=pg.mkPen(COL_NOISE, width=1.5), stepMode="center")
+        self.marker = pg.InfiniteLine(angle=90, pen=pg.mkPen(COL_MARKER, width=1.5))
+        self.startmarker = pg.InfiniteLine(angle=90, pen=pg.mkPen(COL_DATA, width=1.5))
         self.startmarker.setVisible(False)
         self.plot.addItem(self.marker)
         self.plot.addItem(self.startmarker)
@@ -180,9 +189,10 @@ class SpectrumView(QWidget):
                      ranges=((None, None), (None, None)), startmarker_x=None, overlays=()) -> None:
         self._last = dict(wave=wave, spec=spec, spec2=spec2, yrange=yrange, title=title, marker_x=marker_x,
                           ranges=ranges, startmarker_x=startmarker_x, overlays=overlays)
-        self.curve.setData(wave, spec, connect="finite")
+        edges = step_edges(wave)
+        self.curve.setData(edges, np.asarray(spec, dtype=float), connect="finite")
         if spec2 is not None:
-            self.curve2.setData(wave, spec2, connect="finite")
+            self.curve2.setData(edges, np.asarray(spec2, dtype=float), connect="finite")
             self.curve2.setVisible(True)
         else:
             self.curve2.setVisible(False)
@@ -204,9 +214,9 @@ class SpectrumView(QWidget):
         for ov in overlays:
             if ov.kind == "contline":
                 continue
-            pen = {"narrow": pg.mkPen(COL_NARROW, width=1.5), "moment": pg.mkPen(COL_NARROW, width=1.5),
-                   "broad": pg.mkPen(COL_BROAD, width=1.5),
-                   "total": pg.mkPen(COL_TOTAL, width=1.5, style=Qt.PenStyle.DashLine)}[ov.kind]
+            pen = {"narrow": pg.mkPen(COL_NARROW, width=2), "moment": pg.mkPen(COL_NARROW, width=2),
+                   "broad": pg.mkPen(COL_BROAD, width=2),
+                   "total": pg.mkPen(COL_TOTAL, width=2, style=Qt.PenStyle.DashLine)}[ov.kind]
             self.overlay_items.append(self.plot.plot(ov.x, ov.y, pen=pen, connect="finite"))
         for region, (lo, hi) in zip((self.region1, self.region2), ranges):
             if lo is not None and hi is not None and lo != hi:
@@ -247,9 +257,9 @@ class SpecZoomView(QWidget):
             r.setZValue(-10)
             r.setVisible(False)
             self.plot.addItem(r)
-        self.curve = self.plot.plot([], [], pen=pg.mkPen(COL_DATA, width=1), stepMode="center")
-        self.curve2 = self.plot.plot([], [], pen=pg.mkPen(COL_NOISE, width=1))
-        self.marker = pg.InfiniteLine(angle=90, pen=pg.mkPen(COL_MARKER, width=1, style=Qt.PenStyle.DashLine))
+        self.curve = self.plot.plot([], [], pen=pg.mkPen(COL_DATA, width=1.5), stepMode="center")
+        self.curve2 = self.plot.plot([], [], pen=pg.mkPen(COL_NOISE, width=1.5), stepMode="center")
+        self.marker = pg.InfiniteLine(angle=90, pen=pg.mkPen(COL_MARKER, width=1.5, style=Qt.PenStyle.DashLine))
         self.startmarker = pg.InfiniteLine(angle=90, pen=pg.mkPen(COL_DATA, width=2))
         self.startmarker.setVisible(False)
         self.plot.addItem(self.marker)
@@ -278,14 +288,13 @@ class SpecZoomView(QWidget):
         yy = np.asarray(spec, dtype=float)[x1:x2 + 1]
         self.top_axis.set_wave(wave)
         if xx.size >= 2:
-            dx = np.diff(xx)
-            edges = np.concatenate([[xx[0] - dx[0] / 2], (xx[:-1] + xx[1:]) / 2, [xx[-1] + dx[-1] / 2]])
-            self.curve.setData(edges, np.nan_to_num(yy))
+            edges = step_edges(xx)
+            self.curve.setData(edges, yy, connect="finite")
             self.plot.plotItem.vb.setXRange(float(edges[0]), float(edges[-1]), padding=0)
         else:
             self.curve.setData([], [])
-        if spec2 is not None:
-            self.curve2.setData(xx, np.asarray(spec2, dtype=float)[x1:x2 + 1], connect="finite")
+        if spec2 is not None and xx.size >= 2:
+            self.curve2.setData(edges, np.asarray(spec2, dtype=float)[x1:x2 + 1], connect="finite")
             self.curve2.setVisible(True)
         else:
             self.curve2.setVisible(False)
@@ -313,9 +322,9 @@ class SpecZoomView(QWidget):
                                      pen=pg.mkPen(COL_CONT, width=1, style=Qt.PenStyle.DotLine))
                 self.plot.addItem(it)
             else:
-                pen = {"narrow": pg.mkPen(COL_NARROW, width=2), "moment": pg.mkPen(COL_NARROW, width=2),
-                       "broad": pg.mkPen(COL_BROAD, width=2),
-                       "total": pg.mkPen(COL_TOTAL, width=2, style=Qt.PenStyle.DashLine)}[ov.kind]
+                pen = {"narrow": pg.mkPen(COL_NARROW, width=2.5), "moment": pg.mkPen(COL_NARROW, width=2.5),
+                       "broad": pg.mkPen(COL_BROAD, width=2.5),
+                       "total": pg.mkPen(COL_TOTAL, width=2.5, style=Qt.PenStyle.DashLine)}[ov.kind]
                 it = self.plot.plot(ov.x, ov.y, pen=pen, connect="finite")
             self.overlay_items.append(it)
         self.gfit_curve.setVisible(False)

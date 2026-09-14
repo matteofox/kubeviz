@@ -3,9 +3,9 @@
 
 * ``table``    - the parameter table: one row per line (1st component, with the
   continuum columns appended) plus optional 2nd-component rows and the two
-  kinematic rows;
-* ``controls`` - collapsible groups (Fit setup, Options, Status) and two rows of
-  action buttons that are always visible.
+  kinematic rows; it sits in the "Fit results" group at the top of ``controls``;
+* ``controls`` - the panel: Fit results, Fit setup, Options and Status groups
+  (each can be folded) and the grid of action buttons, always visible.
 
 All user actions go to ``controller.linefit_action(code, value)`` with the IDL uvalue
 codes (``'FIT'``, ``'SPN3'``, ``'MINPB1'``, ``'FIXN2'``, ``'IMAGEC4'`` ...).
@@ -22,6 +22,12 @@ from PyQt6.QtWidgets import (QButtonGroup, QCheckBox, QFrame, QGridLayout, QHBox
 from .. import utils
 from ..constants import (CKMS, ERR_METHOD_NAMES, FIT_GAUSS, INSTRRES_EXTPOLY, INSTRRES_TEMPLATE,
                          INSTRRES_VARPOLY, MODE_SPAXEL, NOT_FIT)
+
+PANEL_STYLE = """
+QLabel, QCheckBox, QRadioButton, QPushButton, QToolButton, QLineEdit, QComboBox { font-size: 12px; }
+QLineEdit { padding: 1px 3px; }
+QPushButton { padding: 3px 6px; }
+"""
 
 INSTRRES_MODE_TEXT = {INSTRRES_VARPOLY: "(polynomial fit to cube variance)",
                       INSTRRES_EXTPOLY: "(polynomial fit to external arcs)",
@@ -112,6 +118,7 @@ class LinefitPanels:
         self.image_group.setExclusive(True)
         self.table = self._build_table()
         self.controls = self._build_controls()
+        self.controls.setStyleSheet(PANEL_STYLE)
         self.typeswitch()
         self.update_all(update_userpars=True)
 
@@ -121,8 +128,8 @@ class LinefitPanels:
         st = self.state
         outer_widget = QWidget()
         outer = QVBoxLayout(outer_widget)
-        outer.setContentsMargins(4, 4, 4, 4)
-        outer.setSpacing(4)
+        outer.setContentsMargins(4, 2, 4, 2)
+        outer.setSpacing(2)
 
         hdr = QHBoxLayout()
         self.lbl_type = QLabel("GAUSS")
@@ -156,8 +163,9 @@ class LinefitPanels:
         outer.addLayout(hdr)
 
         self.grid = QGridLayout()
+        self.grid.setContentsMargins(2, 0, 2, 0)
         self.grid.setHorizontalSpacing(5)
-        self.grid.setVerticalSpacing(1)
+        self.grid.setVerticalSpacing(0)
         self.col_labels = []
         for j, name in enumerate(self.COLS):
             lbl = QLabel(name)
@@ -181,6 +189,9 @@ class LinefitPanels:
         scroll.setWidgetResizable(True)
         scroll.setWidget(table)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setMinimumHeight(6 * 26 + 30)          # header + about six rows; grows with the dock
+        scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.table_scroll = scroll
         outer.addWidget(scroll, stretch=1)
         self._building = False
         self._toggle_second_rows(self.cb_second.isChecked())
@@ -204,13 +215,13 @@ class LinefitPanels:
         self.grid.addWidget(d["comp"], row, 1)
         d["lamb"] = _mono_label("", 64)
         self.grid.addWidget(d["lamb"], row, 2)
-        d["start"] = _edit(62, tip="Start value (empty = automatic guess)")
+        d["start"] = _edit(56, tip="Start value (empty = automatic guess)")
         d["start"].editingFinished.connect(lambda c="SP" + code, e=d["start"]: self._text(c, e))
         self.grid.addWidget(d["start"], row, 3)
-        d["best"] = _mono_label("Not Fit", 170)
+        d["best"] = _mono_label("Not Fit", 150)
         self.grid.addWidget(d["best"], row, 4)
-        d["min"] = _edit(58, tip="Lower limit (used when 'Fit with constraints' is on)")
-        d["max"] = _edit(58, tip="Upper limit (used when 'Fit with constraints' is on)")
+        d["min"] = _edit(52, tip="Lower limit (used when 'Fit with constraints' is on)")
+        d["max"] = _edit(52, tip="Upper limit (used when 'Fit with constraints' is on)")
         d["min"].editingFinished.connect(lambda c="MINP" + code, e=d["min"]: self._text(c, e))
         d["max"].editingFinished.connect(lambda c="MAXP" + code, e=d["max"]: self._text(c, e))
         self.grid.addWidget(d["min"], row, 5)
@@ -242,7 +253,7 @@ class LinefitPanels:
         if cont_par is not None:
             c = {}
             ccode = f"C{cont_par}"
-            c["best"] = _mono_label("Not Fit", 150)
+            c["best"] = _mono_label("Not Fit", 140)
             self.grid.addWidget(c["best"], row, 12)
             c["image"] = QRadioButton()
             c["image"].setToolTip("Show the continuum at this line as a map")
@@ -295,11 +306,16 @@ class LinefitPanels:
         lay.setContentsMargins(4, 2, 4, 2)
         lay.setSpacing(2)
 
+        # ---- Fit results (the table)
+        self.results_group = Collapsible("Fit results", self.table, expanded=True)
+        lay.addWidget(self.results_group, stretch=1)
+
         # ---- Fit setup
         setup = QWidget()
         g = QGridLayout(setup)
-        g.setContentsMargins(6, 2, 6, 4)
+        g.setContentsMargins(6, 2, 6, 2)
         g.setHorizontalSpacing(8)
+        g.setVerticalSpacing(2)
         g.addWidget(QLabel("Fit range blue / red (Å)"), 0, 0)
         self.edit_maxwoffb, self.edit_maxwoffr = _edit(62), _edit(62)
         rr = QHBoxLayout()
@@ -347,7 +363,8 @@ class LinefitPanels:
         # ---- Options
         opts = QWidget()
         g = QGridLayout(opts)
-        g.setContentsMargins(6, 2, 6, 4)
+        g.setContentsMargins(6, 2, 6, 2)
+        g.setVerticalSpacing(2)
         r1 = QHBoxLayout()
         self.cb_constr = QCheckBox("Fit with constraints")
         self.cb_constr.setToolTip("Use the user start values and min/max limits of the table")
@@ -378,7 +395,8 @@ class LinefitPanels:
         r1.addStretch(1)
         g.addLayout(r1, 0, 0)
         r2 = QHBoxLayout()
-        r2.addWidget(QLabel("Instrumental resolution:"))
+        r2.setSpacing(4)
+        r2.addWidget(QLabel("Instr. resolution:"))
         b = QPushButton("Fit sky lines")
         b.setToolTip("Fit the sky lines in the variance cube")
         b.clicked.connect(lambda: self.ctl.linefit_action("FITSKY"))
@@ -399,10 +417,11 @@ class LinefitPanels:
         r2.addStretch(1)
         g.addLayout(r2, 1, 0)
         r3 = QHBoxLayout()
+        r3.setSpacing(4)
         r3.addWidget(QLabel("Polynomial coefficients:"))
         self.edit_coeff = []
         for i in range(st.max_polycoeff_instrres + 1):
-            e = _edit(100)
+            e = _edit(90)
             e.setPlaceholderText("")
             e.editingFinished.connect(lambda i=i, ee=e: self._text(f"POLYCOEFFPAR{i}", ee))
             self.edit_coeff.append(e)
@@ -414,7 +433,7 @@ class LinefitPanels:
         # ---- Status
         status = QWidget()
         g = QHBoxLayout(status)
-        g.setContentsMargins(6, 2, 6, 4)
+        g.setContentsMargins(6, 2, 6, 2)
         g.addWidget(QLabel("Errors:"))
         self.lbl_errmethod = QLabel("")
         g.addWidget(self.lbl_errmethod)
@@ -443,37 +462,47 @@ class LinefitPanels:
         g.addStretch(1)
         lay.addWidget(Collapsible("Status", status, expanded=True))
 
-        # ---- actions (always visible)
-        for spec in (
+        # ---- actions (always visible): one column per topic, current selection on top, all below
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 4, 0, 2)
+        grid.setHorizontalSpacing(4)
+        grid.setVerticalSpacing(3)
+        columns = [
             (("FIT", "FIT", "Fit the current spaxel / mask"),
-             ("FIT ADJ", "FITADJ", "Fit using the neighbours as initial guess"),
-             ("RESET FIT", "RESETFIT", "Reset the fit of this spaxel / mask"), None,
-             ("AUTO FLAG", "FLAGALL", "Flag all spaxels / masks"), None,
-             ("RESET ALL PARS", "RESETALL", "Reset fit, user values and settings"),
-             ("RESET USER PARS", "RESETUSER", "Reset user start values and limits")),
-            (("FIT ALL", "FITALL", "Fit all spaxels in the FITALL range (or all masks)"),
-             ("FIT ADJ ALL", "FITADJALL", "Refit bad spaxels next to good ones, iteratively"),
-             ("RESET FIT ALL", "RESETFITALL", "Reset all fits"), None,
-             ("FLAG ON/OFF", "RESIMAMASK", "Show flagged spaxels in the result maps or hide them"), None,
-             ("SAVE", "SAVE", "Save the results as FITS"),
-             ("MASK/SPAXEL", "MODE", "Switch mask / spaxel fitting"),
-             ("GAUSS/MOMENTS", "TYPE", "Switch Gaussian fits / moments"))):
-            row = QHBoxLayout()
-            row.setSpacing(4)
-            for item in spec:
-                if item is None:
-                    row.addSpacing(18)
-                    continue
-                text, code, tip = item
+             ("FIT ALL", "FITALL", "Fit all spaxels in the FITALL range (or all masks)")),
+            (("FIT ADJ", "FITADJ", "Fit using the neighbours as initial guess"),
+             ("FIT ADJ ALL", "FITADJALL", "Refit bad spaxels next to good ones, iteratively")),
+            (("RESET FIT", "RESETFIT", "Reset the fit of this spaxel / mask"),
+             ("RESET FIT ALL", "RESETFITALL", "Reset all fits")),
+            (("AUTO FLAG", "FLAGALL", "Flag all spaxels / masks with the S/N and error thresholds"),
+             ("FLAG ON/OFF", "RESIMAMASK", "Show flagged spaxels in the result maps or hide them")),
+            (("RESET USER PARS", "RESETUSER", "Reset user start values and limits"),
+             ("RESET ALL PARS", "RESETALL", "Reset fit, user values and settings")),
+            (("MASK / SPAXEL", "MODE", "Switch mask / spaxel fitting"),
+             ("GAUSS / MOMENTS", "TYPE", "Switch Gaussian fits / moments")),
+        ]
+        for col, items in enumerate(columns):
+            for row, (text, code, tip) in enumerate(items):
                 btn = QPushButton(text)
                 btn.setToolTip(tip)
+                btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                 btn.clicked.connect(lambda _=False, c=code: self.ctl.linefit_action(c))
-                row.addWidget(btn)
-            row.addStretch(1)
-            lay.addLayout(row)
-        lay.addStretch(1)
+                grid.addWidget(btn, row, col)
+            grid.setColumnStretch(col, 1)
+        save = QPushButton("SAVE")
+        save.setToolTip("Save the results as FITS")
+        save.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        save.setStyleSheet("font-weight: bold")
+        save.clicked.connect(lambda: self.ctl.linefit_action("SAVE"))
+        grid.addWidget(save, 0, len(columns), 2, 1)
+        grid.setColumnStretch(len(columns), 1)
+        lay.addLayout(grid)
         self._building = False
         return panel
+
+    def show_results(self):
+        """Expand the Fit results group (Options -> Show linefit window)."""
+        self.results_group.btn.setChecked(True)
 
     # ================================================================== events
     def _text(self, code, edit):

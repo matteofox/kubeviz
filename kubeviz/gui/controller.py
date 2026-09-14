@@ -107,18 +107,15 @@ class KubevizGUI(QMainWindow):
             return d
         self.spec_dock = dock("Spectrum", self.spec, "dock_spectrum")
         self.zoom_dock = dock("Spectral zoom", self.zoom, "dock_zoom")
-        self.ctrl_dock = dock("Fit controls", None, "dock_controls")
-        self.table_dock = dock("Line parameters", None, "dock_table")
+        self.ctrl_dock = dock("Line fitting", None, "dock_controls")
         area = Qt.DockWidgetArea.RightDockWidgetArea
         self.addDockWidget(area, self.spec_dock)
         self.addDockWidget(area, self.zoom_dock)
         self.addDockWidget(area, self.ctrl_dock)
-        # the right column runs the full height; the table sits under the image only
         self.setCorner(Qt.Corner.BottomRightCorner, Qt.DockWidgetArea.RightDockWidgetArea)
         self.setCorner(Qt.Corner.TopRightCorner, Qt.DockWidgetArea.RightDockWidgetArea)
-        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.table_dock)
-        self.resizeDocks([self.spec_dock, self.zoom_dock, self.ctrl_dock], [300, 260, 300], Qt.Orientation.Vertical)
-        self.resizeDocks([self.spec_dock], [720], Qt.Orientation.Horizontal)
+        self.resizeDocks([self.spec_dock, self.zoom_dock, self.ctrl_dock], [260, 220, 520], Qt.Orientation.Vertical)
+        self.resizeDocks([self.spec_dock], [980], Qt.Orientation.Horizontal)
         self.zoom_dock.visibilityChanged.connect(self._zoom_dock_visibility)
         self.resize(1600, 1000)
 
@@ -152,17 +149,16 @@ class KubevizGUI(QMainWindow):
         """(Re)create the line parameter table and the fit controls."""
         self.linefit = LinefitPanels(self)
         self.state.on_userpars_changed = lambda: self.linefit.update_all(update_userpars=True)
-        for d in (self.ctrl_dock, self.table_dock):
-            old = d.widget()
-            if old is not None:
-                old.setParent(None)
-                old.deleteLater()
+        old = self.ctrl_dock.widget()
+        if old is not None:
+            old.setParent(None)
+            old.deleteLater()
         self.ctrl_dock.setWidget(self.linefit.controls)
-        self.table_dock.setWidget(self.linefit.table)
 
     def show_table(self):
-        self.table_dock.show()
-        self.table_dock.raise_()
+        self.ctrl_dock.show()
+        self.ctrl_dock.raise_()
+        self.linefit.show_results()
         self.state.linefitmap = True
 
     def _zoom_dock_visibility(self, visible):
@@ -176,7 +172,7 @@ class KubevizGUI(QMainWindow):
     def _restore_layout(self):
         s = self._settings()
         geo = s.value("geometry")
-        st = s.value("windowState")
+        st = s.value("windowState_v2")
         if geo is not None:
             self.restoreGeometry(geo)
         if st is not None:
@@ -185,7 +181,7 @@ class KubevizGUI(QMainWindow):
     def _save_layout(self):
         s = self._settings()
         s.setValue("geometry", self.saveGeometry())
-        s.setValue("windowState", self.saveState())
+        s.setValue("windowState_v2", self.saveState())
 
     def _request_cancel(self):
         self._cancel_requested = True
@@ -193,7 +189,7 @@ class KubevizGUI(QMainWindow):
     # ================================================================== window management
     def show_all(self):
         self.show()
-        self.state.linefitmap = self.table_dock.isVisible()
+        self.state.linefitmap = self.ctrl_dock.isVisible()
 
     def closeEvent(self, ev):
         # Qt 6 closes the top-level windows when the application quits, so this runs
