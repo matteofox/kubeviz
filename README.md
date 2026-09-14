@@ -1,3 +1,55 @@
+# kubeviz
+
+Interactive visualisation and emission-line fitting of IFU datacubes.
+
+This repository contains two implementations:
+
+* **`kubeviz/` (Python 3, in development)** - a full port of the IDL program to Python
+  (numpy/scipy/astropy, Qt GUI). The headless engine and the batch mode are complete;
+  the GUI is under construction. See `PORTING.md` for the routine-by-routine status.
+* **`kubeviz.pro` (IDL, V2.2)** - the original program, unchanged, with its `addons/`,
+  `templates/` and `doc/` directories. The IDL instructions follow below.
+
+## Python quick start
+
+```bash
+pip install -e .            # engine only (numpy, scipy, astropy)
+pip install -e ".[gui]"     # plus PyQt6 and pyqtgraph for the GUI (phase 3)
+python -m pytest            # run the test-suite on synthetic cubes
+```
+
+Batch mode (fit every spaxel of a cube, write the results FITS and a session file):
+
+```bash
+kubeviz cube.fits --redshift 0.85 --lineset 1 --batch --fit-all-lines --outdir results/
+```
+
+Every keyword of the IDL procedure is available as a command line flag (`kubeviz --help`).
+Results files use the same plane layout and header keywords as the IDL version, so they can be
+exchanged between the two implementations. Python sessions are saved as `.kvz` files.
+
+From Python:
+
+```python
+from kubeviz.session import start_session
+from kubeviz.fitting.linefit import dofit
+from kubeviz.fitting.fitall import fitall
+from kubeviz.fitting.flags import autoflag
+from kubeviz.io.results import saveres
+
+state = start_session("cube.fits", redshift=0.85, lineset=1)
+state.pndofit[:state.Nlines] = 1      # fit the narrow component of every line in the set
+state.pcdofit[:state.Nlines] = 1      # and the continuum
+fitall(state)                          # or dofit(state) for the current spaxel (state.col/row)
+autoflag(state)
+saveres(state, "cube_res.fits")
+res = state.res                        # ResultSet: res.n[row, col] = [flag, dv, sigma, fluxes...]
+```
+
+---
+
+# IDL version (V2.2) - original README
+
 Acknowledgements:
 
 If you use KUBEVIZ in your work please add the following sentence in the ackowledgement section of any resulting publication:

@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kubeviz"
+version = "3.0.0a0"
+description = "Interactive visualisation and emission-line fitting of IFU datacubes (Python port of the IDL kubeviz)"
+readme = "README.md"
+license = {text = "GPL-3.0-or-later"}
+authors = [
+  {name = "Matteo Fossati"},
+  {name = "David J. Wilman"},
+  {name = "Joris Gerssen"},
+]
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "astropy>=5.3",
+]
+
+[project.optional-dependencies]
+gui = ["PyQt6>=6.5", "pyqtgraph>=0.13"]
+test = ["pytest>=7"]
+
+[project.scripts]
+kubeviz = "kubeviz.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["kubeviz*"]
+
+[tool.setuptools.package-data]
+kubeviz = ["data/templates/kmos/*.txt", "data/templates/ohspec/*.fits"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
