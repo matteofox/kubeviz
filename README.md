@@ -18,6 +18,15 @@ pip install -e ".[gui]"     # plus PyQt6 and pyqtgraph for the GUI
 python -m pytest            # run the test-suite on synthetic cubes
 ```
 
+If the parent directory of this repository is on your `PYTHONPATH` (for example
+`export PYTHONPATH=$PYTHONPATH:~/Software`), the repository folder shadows the package
+as an empty namespace package and `kubeviz` fails with "cannot import name
+`__version__` from 'kubeviz' (unknown location)". Install in compat editable mode instead:
+
+```bash
+pip install -e ".[gui]" --config-settings editable_mode=compat
+```
+
 Batch mode (fit every spaxel of a cube, write the results FITS and a session file):
 
 ```bash
