@@ -214,8 +214,9 @@ class SpaxelView(QWidget):
         self.info = QLabel(" ")
         f = QFont("Menlo")
         f.setStyleHint(QFont.StyleHint.Monospace)
-        f.setPointSize(11)
+        f.setPointSize(13)
         self.info.setFont(f)
+        self.info.setContentsMargins(2, 2, 2, 2)
         self.info.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         lay.addWidget(self.info)
 
@@ -241,6 +242,7 @@ class SpaxelView(QWidget):
             self.colorbar.axis.setStyle(showValues=True, tickLength=5)
             self.colorbar.axis.setTicks(None if linear else [list(ticks or [])])
             self.colorbar.axis.setLabel(label)
+            self.colorbar.axis.setWidth(84)      # room for tick text and the label side by side
         finally:
             self._levels_from_code = False
 

@@ -122,7 +122,7 @@ def test_gui_fit_and_result_maps(gui, qapp):
     lf.ctl.linefit_action("IMAGEN3")
     assert st.cubesel == C.CUBE_LINEFIT and st.par_imagebutton == "N3"
     img, bad = current_image(st)
-    assert np.isfinite(img[5, 6]) and img[0, 1] == 0            # unfit spaxels are 0 until autoflag
+    assert np.isfinite(img[5, 6]) and np.isnan(img[0, 1])       # unfit spaxels are blank
     lf.ctl.linefit_action("FLAG")
     assert rs.n[5, 6, 0] == C.FLAG_MANUAL
     lf.ctl.linefit_action("FLAG")

@@ -121,14 +121,21 @@ class KubevizGUI(QMainWindow):
 
         # status bar: last log message, progress and interrupt
         sb = self.statusBar()
+        sb.setSizeGripEnabled(False)
+        sb.setStyleSheet("QStatusBar { min-height: 20px; max-height: 22px; font-size: 12px; } QStatusBar::item { border: none; }")
+        sb.setContentsMargins(4, 0, 4, 0)
         self.status_label = QLabel("")
+        self.status_label.setContentsMargins(0, 0, 0, 0)
         sb.addWidget(self.status_label, 1)
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 1000)
         self.progress_bar.setMaximumWidth(260)
+        self.progress_bar.setMaximumHeight(14)
         self.progress_bar.setVisible(False)
         sb.addPermanentWidget(self.progress_bar)
         self.interrupt_btn = QPushButton("Interrupt")
+        self.interrupt_btn.setFlat(True)
+        self.interrupt_btn.setMaximumHeight(20)
         self.interrupt_btn.setVisible(False)
         self._cancel_requested = False
         self.interrupt_btn.clicked.connect(self._request_cancel)

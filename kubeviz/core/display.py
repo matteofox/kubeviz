@@ -7,7 +7,7 @@ from __future__ import annotations
 import numpy as np
 
 from .. import utils
-from ..constants import (CUBE_BADPIX, CUBE_DATA, CUBE_LINEFIT, CUBE_LINEFIT_ERR, CUBE_LINEFIT_SN,
+from ..constants import (NOT_FIT, CUBE_BADPIX, CUBE_DATA, CUBE_LINEFIT, CUBE_LINEFIT_ERR, CUBE_LINEFIT_SN,
                          CUBE_NOISE, CUBE_SN, FIT_GAUSS, IMG_MED1_MINUS_MED2, IMG_MED2_MINUS_MED1,
                          IMG_MEDSUB1, IMG_MEDSUB2, IMG_SLICE, MODE_SPAXEL)
 from ..results import moment_reshape
@@ -103,21 +103,26 @@ def linefit_image_update(state, newpar: str) -> bool:
         nerr = berr = moment_reshape(rs.merr, mi, nl, error=True)
     shape = (state.Nrow, state.Ncol)
 
+    # spaxels never fitted are blank (NaN) in every map; IDL showed them as 0
+    unfit = nerr[..., 1, 0] == NOT_FIT
     if newpar == "CHISQ":
-        ok = c[..., 0] == 0
+        ok = (c[..., 0] == 0) & ~unfit
         img = np.full(shape, np.nan)
         img[ok] = rs.chisq[ok]
         state.lineresimg = img
         state.lineerrresimg = img.copy()
-        state.unm_lineresimg = rs.chisq.copy()
-        state.unm_lineerrresimg = rs.chisq.copy()
+        unm = np.where(unfit, np.nan, rs.chisq)
+        state.unm_lineresimg = unm
+        state.unm_lineerrresimg = unm.copy()
         state.par_imagebutton = newpar
         return True
     if newpar == "FLAG":
-        state.lineresimg = n[..., 0].copy()
-        state.unm_lineresimg = n[..., 0].copy()
-        state.lineerrresimg = nerr[..., 0, 0].copy()
-        state.unm_lineerrresimg = nerr[..., 0, 0].copy()
+        flag = np.where(unfit, np.nan, n[..., 0].astype(float))
+        state.lineresimg = flag
+        state.unm_lineresimg = flag.copy()
+        ferr = np.where(unfit, np.nan, nerr[..., 0, 0].astype(float))
+        state.lineerrresimg = ferr
+        state.unm_lineerrresimg = ferr.copy()
         state.par_imagebutton = newpar
         return True
 
@@ -138,6 +143,10 @@ def linefit_image_update(state, newpar: str) -> bool:
         plane = c[..., cpar]
         errplane = 0.5 * (cerr[..., cpar, 0] - cerr[..., cpar, 1])
         refplane = cerr[..., cpar, 0]
+    unfit = refplane == NOT_FIT
+    ok = ok & ~unfit
+    plane = np.where(unfit, np.nan, plane)
+    errplane = np.where(unfit, np.nan, errplane)
 
     if not np.any(ok):
         state.unm_lineresimg = plane.copy()
@@ -148,7 +157,7 @@ def linefit_image_update(state, newpar: str) -> bool:
             return False
         state.par_imagebutton = newpar
         return True
-    maxerr = np.max(np.abs(errplane))
+    maxerr = np.nanmax(np.abs(errplane)) if np.any(np.isfinite(errplane)) else 0.0
     if (maxerr == 0.0 or maxerr == 999.0) and np.min(np.abs(refplane)) > 998:
         utils.warn("No valid results in this plane as yet.")
         if state.flagmode:

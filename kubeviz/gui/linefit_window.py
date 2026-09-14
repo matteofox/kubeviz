@@ -27,6 +27,8 @@ PANEL_STYLE = """
 QLabel, QCheckBox, QRadioButton, QPushButton, QToolButton, QLineEdit, QComboBox { font-size: 12px; }
 QLineEdit { padding: 1px 3px; }
 QPushButton { padding: 3px 6px; }
+QPushButton#action { min-height: 30px; font-size: 13px; }
+QPushButton#save { min-height: 30px; font-size: 13px; font-weight: bold; }
 """
 
 INSTRRES_MODE_TEXT = {INSTRRES_VARPOLY: "(polynomial fit to cube variance)",
@@ -484,6 +486,7 @@ class LinefitPanels:
         for col, items in enumerate(columns):
             for row, (text, code, tip) in enumerate(items):
                 btn = QPushButton(text)
+                btn.setObjectName("action")
                 btn.setToolTip(tip)
                 btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
                 btn.clicked.connect(lambda _=False, c=code: self.ctl.linefit_action(c))
@@ -491,8 +494,8 @@ class LinefitPanels:
             grid.setColumnStretch(col, 1)
         save = QPushButton("SAVE")
         save.setToolTip("Save the results as FITS")
+        save.setObjectName("save")
         save.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        save.setStyleSheet("font-weight: bold")
         save.clicked.connect(lambda: self.ctl.linefit_action("SAVE"))
         grid.addWidget(save, 0, len(columns), 2, 1)
         grid.setColumnStretch(len(columns), 1)
