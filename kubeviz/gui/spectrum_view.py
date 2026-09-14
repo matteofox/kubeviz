@@ -91,9 +91,17 @@ class SpectrumView(QWidget):
         self.plot.addItem(self.startmarker)
         self.plot.clickedAtX.connect(self.wavelengthClicked)
         self.plot.keyPressed.connect(self.keyPressed)
+        self.overlay_items = []
+        self._user_view = False          # True once the user zoomed/panned: keep that view
+        self._wave_id = None
+        self.plot.plotItem.vb.sigRangeChangedManually.connect(self._manual_range)
         lay.addWidget(self.plot, stretch=1)
 
         row = QHBoxLayout()
+        self.auto_btn = QPushButton("Auto")
+        self.auto_btn.setToolTip("Back to automatic axis ranges (they stay fixed once you zoom or pan)")
+        self.auto_btn.clicked.connect(self.reset_view)
+        row.addWidget(self.auto_btn)
         row.addWidget(QLabel("Min"))
         self.zmin_edit = QLineEdit("0.0")
         self.zmin_edit.setMaximumWidth(70)
@@ -150,8 +158,20 @@ class SpectrumView(QWidget):
         self.zmax_edit.setText(f"{zmax:g}")
         self.fix_btn.setChecked(fixed)
 
+    def _manual_range(self, *args):
+        self._user_view = True
+
+    def reset_view(self):
+        self._user_view = False
+        if self._last is not None:
+            self.set_spectrum(**self._last)
+
+    _last = None
+
     def set_spectrum(self, wave, spec, spec2=None, yrange=None, title="", marker_x=None,
-                     ranges=((None, None), (None, None)), startmarker_x=None) -> None:
+                     ranges=((None, None), (None, None)), startmarker_x=None, overlays=()) -> None:
+        self._last = dict(wave=wave, spec=spec, spec2=spec2, yrange=yrange, title=title, marker_x=marker_x,
+                          ranges=ranges, startmarker_x=startmarker_x, overlays=overlays)
         self.curve.setData(wave, spec, connect="finite")
         if spec2 is not None:
             self.curve2.setData(wave, spec2, connect="finite")
@@ -160,9 +180,26 @@ class SpectrumView(QWidget):
             self.curve2.setVisible(False)
         self.plot.setTitle(title, size="10pt")
         vb = self.plot.plotItem.vb
-        vb.setXRange(float(wave[0]), float(wave[-1]), padding=0)
-        if yrange is not None and np.all(np.isfinite(yrange)) and yrange[1] > yrange[0]:
-            vb.setYRange(float(yrange[0]), float(yrange[1]), padding=0.02)
+        new_wave = self._wave_id != (id(wave), len(wave))
+        if new_wave:
+            self._wave_id = (id(wave), len(wave))
+            self._user_view = False
+        if not self._user_view:
+            vb.blockSignals(True)
+            vb.setXRange(float(wave[0]), float(wave[-1]), padding=0)
+            if yrange is not None and np.all(np.isfinite(yrange)) and yrange[1] > yrange[0]:
+                vb.setYRange(float(yrange[0]), float(yrange[1]), padding=0.02)
+            vb.blockSignals(False)
+        for it in self.overlay_items:
+            self.plot.removeItem(it)
+        self.overlay_items = []
+        for ov in overlays:
+            if ov.kind == "contline":
+                continue
+            pen = {"narrow": pg.mkPen(COL_NARROW, width=1.5), "moment": pg.mkPen(COL_NARROW, width=1.5),
+                   "broad": pg.mkPen(COL_BROAD, width=1.5),
+                   "total": pg.mkPen(COL_TOTAL, width=1.5, style=Qt.PenStyle.DashLine)}[ov.kind]
+            self.overlay_items.append(self.plot.plot(ov.x, ov.y, pen=pen, connect="finite"))
         for region, (lo, hi) in zip((self.region1, self.region2), ranges):
             if lo is not None and hi is not None and lo != hi:
                 region.setRegion((min(lo, hi), max(lo, hi)))

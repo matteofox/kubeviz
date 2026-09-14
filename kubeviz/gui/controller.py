@@ -94,8 +94,6 @@ class KubevizGUI(QMainWindow):
         right = QSplitter(Qt.Orientation.Vertical)
         right.addWidget(self.spec)
         right.addWidget(self.zoom)
-        right.setStretchFactor(0, 3)
-        right.setStretchFactor(1, 2)
         self.right = right
         split = QSplitter(Qt.Orientation.Horizontal)
         split.addWidget(self.spax)
@@ -108,10 +106,24 @@ class KubevizGUI(QMainWindow):
 
         self._build_menus()
         self._connect()
-        self.linefit = LinefitWindow(self)
-        self.state.on_userpars_changed = lambda: self.linefit.update_all(update_userpars=True)
+        self.linefit = None
+        self._install_linefit()
         self.spax.reset_view(state.Ncol, state.Nrow)
         self.update_all(UPDATE_FULL)
+
+    def _install_linefit(self):
+        """(Re)create the linefit table window and embed its controls in the right column."""
+        if self.linefit is not None:
+            self.linefit.detach_controls()
+            self.linefit.close()
+        self.linefit = LinefitWindow(self)
+        self.state.on_userpars_changed = lambda: self.linefit.update_all(update_userpars=True)
+        if self.right.count() >= 3:
+            old = self.right.widget(2)
+            old.setParent(None)
+        self.right.addWidget(self.linefit.controls)
+        h = max(self.right.height(), 600)
+        self.right.setSizes([int(h * 0.32), int(h * 0.30), int(h * 0.38)])
 
     # ================================================================== window management
     def show_all(self):
@@ -367,8 +379,9 @@ class KubevizGUI(QMainWindow):
         start = None
         if st.npress == 1:
             start = w[st.wavrange1[0]] if st.wavsel == 1 else w[st.wavrange2[0]]
+        overlays = fit_overlays(st, np.asarray(w, dtype=float)) if st.Nlines > 0 else ()
         self.spec.set_spectrum(w, show, show2, yrange=yr, title=title, marker_x=w[st.wpix] if st.marker == 1 else None,
-                               ranges=(r1, r2), startmarker_x=start)
+                               ranges=(r1, r2), startmarker_x=start, overlays=overlays)
         self.spec.set_mode(st.specmode)
         self.spec.set_scale_controls(st.zmin_spec, st.zmax_spec, st.scale == 1)
 
@@ -657,9 +670,7 @@ class KubevizGUI(QMainWindow):
     def do_change_redshift(self, z):
         st = self.state
         change_redshift(st, z)
-        self.lut_indices = self.lut_indices
-        self.linefit.close()
-        self.linefit = LinefitWindow(self)
+        self._install_linefit()
         self.linefit.show()
         st.linefitmap = True
         self.update_all(UPDATE_FULL)
@@ -722,6 +733,7 @@ class KubevizGUI(QMainWindow):
         elif code == "FIT":
             self._fit_current()
             lf.update_all()
+            self.plotspec()
             self.plotspeczoom()
             if st.cubesel > CUBE_SN:
                 self.plotspax()
@@ -780,6 +792,7 @@ class KubevizGUI(QMainWindow):
         elif code == "RESETFIT":
             linefit_reset(st)
             lf.update_all()
+            self.plotspec()
             self.plotspeczoom()
         elif code == "RESETFITALL":
             linefit_resetall(st)
@@ -861,6 +874,7 @@ class KubevizGUI(QMainWindow):
                 for il in lines_c:
                     st.cshow[il] = 1 - st.cshow[il]
                 lf.update_all(update_userpars=True)
+            self.plotspec()
             self.plotspeczoom()
         elif code.startswith("IMAGE"):
             self.plotspax(fitima_update=code[5:])
@@ -1041,8 +1055,7 @@ class KubevizGUI(QMainWindow):
                 smooth_state_montecarlo(st)
                 linefit_init(st)
                 medsum_image_update(st)
-                self.linefit.close()
-                self.linefit = LinefitWindow(self)
+                self._install_linefit()
                 self.linefit.show()
             else:
                 return
@@ -1139,8 +1152,7 @@ class KubevizGUI(QMainWindow):
         self.lut_indices = None
         self._cached_rgb = None
         self.setWindowTitle(f"spaxel viewer: {self.state.filename}")
-        self.linefit.close()
-        self.linefit = LinefitWindow(self)
+        self._install_linefit()
         self.linefit.show()
         self.zoom.setVisible(bool(self.state.zoommap))
         self.spax.reset_view(self.state.Ncol, self.state.Nrow)

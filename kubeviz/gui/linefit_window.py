@@ -113,7 +113,17 @@ class LinefitWindow(QMainWindow):
         table = QWidget()
         table.setLayout(self.grid)
         outer.addWidget(table)
-        outer.addWidget(_hline())
+        outer.addStretch(1)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(central)
+        self.setCentralWidget(scroll)
+
+        # ---------------- fitting controls: a separate widget embedded in the main window
+        self.controls = QWidget()
+        ctl = QVBoxLayout(self.controls)
+        ctl.setContentsMargins(4, 2, 4, 2)
+        ctl.setSpacing(2)
 
         # ---------------- chisq / flag / autoflag thresholds
         fr = QHBoxLayout()
@@ -148,8 +158,8 @@ class LinefitWindow(QMainWindow):
         self.edit_maxvelerr.editingFinished.connect(lambda: self._text("MASKMAXVELERR", self.edit_maxvelerr))
         fr.addWidget(self.edit_maxvelerr)
         fr.addStretch(1)
-        outer.addLayout(fr)
-        outer.addWidget(_hline())
+        ctl.addLayout(fr)
+        ctl.addWidget(_hline())
 
         # ---------------- fitting range / continuum
         cr = QGridLayout()
@@ -179,8 +189,8 @@ class LinefitWindow(QMainWindow):
         cr.addWidget(self.edit_cmaxperc, 1, 6)
         cr.addWidget(self.edit_corder, 1, 7)
         cr.setColumnStretch(8, 1)
-        outer.addLayout(cr)
-        outer.addWidget(_hline())
+        ctl.addLayout(cr)
+        ctl.addWidget(_hline())
 
         # ---------------- fit options
         op = QHBoxLayout()
@@ -213,7 +223,7 @@ class LinefitWindow(QMainWindow):
         self.cb_smart.clicked.connect(lambda: self.ctl.linefit_action("SMART_2ND"))
         op.addWidget(self.cb_smart)
         op.addStretch(1)
-        outer.addLayout(op)
+        ctl.addLayout(op)
 
         st2 = QHBoxLayout()
         st2.addWidget(QLabel("Montecarlo PDFs plot/save:"))
@@ -235,8 +245,8 @@ class LinefitWindow(QMainWindow):
         self.lbl_inputmap = QLabel("OFF")
         st2.addWidget(self.lbl_inputmap)
         st2.addStretch(1)
-        outer.addLayout(st2)
-        outer.addWidget(_hline())
+        ctl.addLayout(st2)
+        ctl.addWidget(_hline())
 
         # ---------------- instrumental resolution
         ir = QHBoxLayout()
@@ -261,7 +271,7 @@ class LinefitWindow(QMainWindow):
         self.lbl_instrres_mode = QLabel("")
         ir.addWidget(self.lbl_instrres_mode)
         ir.addStretch(1)
-        outer.addLayout(ir)
+        ctl.addLayout(ir)
         ir2 = QHBoxLayout()
         ir2.addWidget(QLabel("Polynomial coefficients:"))
         self.edit_coeff = []
@@ -271,8 +281,8 @@ class LinefitWindow(QMainWindow):
             self.edit_coeff.append(e)
             ir2.addWidget(e)
         ir2.addStretch(1)
-        outer.addLayout(ir2)
-        outer.addWidget(_hline())
+        ctl.addLayout(ir2)
+        ctl.addWidget(_hline())
 
         # ---------------- action buttons
         b1 = QHBoxLayout()
@@ -289,7 +299,7 @@ class LinefitWindow(QMainWindow):
             btn.clicked.connect(lambda _=False, c=code: self.ctl.linefit_action(c))
             b1.addWidget(btn)
         b1.addStretch(1)
-        outer.addLayout(b1)
+        ctl.addLayout(b1)
         b2 = QHBoxLayout()
         for text, code, tip in (("FIT ALL", "FITALL", "Fit all masks / spaxels"),
                                 ("FIT ADJ ALL", "FITADJALL", "Fit bad spaxels using initial guess from adjacent spaxels"),
@@ -306,22 +316,19 @@ class LinefitWindow(QMainWindow):
             btn.clicked.connect(lambda _=False, c=code: self.ctl.linefit_action(c))
             b2.addWidget(btn)
         b2.addStretch(1)
-        outer.addLayout(b2)
-        outer.addStretch(1)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setWidget(central)
-        self.setCentralWidget(scroll)
+        ctl.addLayout(b2)
+        ctl.addStretch(1)
         self._building = False
         nrows = 4 + 3 * st.Nlines
-        self.resize(1120, min(240 + 34 * nrows + 260, 900))
+        self.resize(1120, min(90 + 30 * nrows, 900))
         self.typeswitch()
         self.update_all(update_userpars=True)
 
     def _add_param_row(self, row, label, lt, par, comp_text, with_fit_show=True, is_cont=False):
         d = {}
-        self.grid.addWidget(QLabel(label), row, 0)
+        lbl0 = QLabel(label)
+        lbl0.setStyleSheet("font-weight: bold" if lt == "N" else "")
+        self.grid.addWidget(lbl0, row, 0)
         d["comp"] = QLabel(comp_text)
         self.grid.addWidget(d["comp"], row, 1)
         d["lamb"] = QLabel("")
@@ -364,12 +371,24 @@ class LinefitWindow(QMainWindow):
         self.w[(lt, par)] = d
         return row + 1
 
+    _BANDS = ("#f4f4f4", "#dcdcdc")
+
+    def _add_band(self, row, nrows, group):
+        """Grey background band behind ``nrows`` grid rows (alternating per transition)."""
+        band = QFrame()
+        band.setStyleSheet(f"background-color: {self._BANDS[group % 2]}; border-radius: 3px;")
+        band.setAutoFillBackground(True)
+        self.grid.addWidget(band, row, 0, nrows, len(self.COLS))
+        band.lower()
+
     def _add_kin_rows(self, row, par, label, unit):
+        self._add_band(row, 2, par - 1)
         row = self._add_param_row(row, label, "N", par, "Narrow", with_fit_show=False)
         row = self._add_param_row(row, unit, "B", par, "Broad", with_fit_show=False)
         return row
 
     def _add_line_rows(self, row, par, iline):
+        self._add_band(row, 3, iline)
         name = self.state.linefancynames[iline]
         row = self._add_param_row(row, name, "N", par, "Narrow")
         row = self._add_param_row(row, "", "B", par, "Broad")
@@ -557,6 +576,10 @@ class LinefitWindow(QMainWindow):
     def closeEvent(self, ev):
         self.state.linefitmap = False
         ev.accept()
+
+    def detach_controls(self):
+        """Take the controls widget out of the main window before this window dies."""
+        self.controls.setParent(None)
 
 
 def _cont_string(value, err):

@@ -14,6 +14,16 @@ from ..constants import FLAG_MANUAL, NOT_FIT
 from .flags import adjflag
 from .linefit import dofit, linefit_reset, linefit_resetuser, startminmaxconsistencycheck, testspec
 
+def _status_line(msg):
+    """Progress on a single, rewritten terminal line (``kubeviz_statuslinecore``)."""
+    import sys
+    if msg is None:
+        sys.stdout.write("\n")
+    else:
+        sys.stdout.write("\r" + msg.ljust(78))
+    sys.stdout.flush()
+
+
 _DX = np.array([-1, 0, 1, 1, 1, 0, -1, -1])
 _DY = np.array([1, 1, 1, 0, -1, -1, -1, 0])
 
@@ -151,7 +161,7 @@ def fitadjall(state, should_cancel=None, on_progress=None, on_fit=None) -> int:
         if nfitnow == 0:
             break
         msg = f"[PROGRES] Running step with {ii} neighbours, for {nfitnow} pixels."
-        utils.log.info(msg)
+        _status_line(msg)
         if on_progress is not None:
             on_progress(1.0 - np.sum(badfit & hope) / max(nbad_init, 1), msg)
         ys, xs = np.nonzero(now)
@@ -174,6 +184,7 @@ def fitadjall(state, should_cancel=None, on_progress=None, on_fit=None) -> int:
             break
         badfit = (~bad) & (flag > 0) & inrange
 
+    _status_line(None)
     linefit_resetuser(state, all_pars=True, startonly=True)
     state.col, state.row = colstart, rowstart
     nbad_final = int(np.sum((~bad) & (flag > 0) & inrange))
