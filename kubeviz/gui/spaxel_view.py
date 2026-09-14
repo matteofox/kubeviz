@@ -104,6 +104,7 @@ class SpaxelView(QWidget):
     colourSelected = pyqtSignal(int)
     invertToggled = pyqtSignal(bool)
     cursorModeSelected = pyqtSignal(int)
+    userCutsRequested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -123,6 +124,10 @@ class SpaxelView(QWidget):
         self.invert_btn.setText("Inv")
         self.invert_btn.setCheckable(True)
         self.invert_btn.setToolTip("Invert the colour table")
+        self.cuts_btn = QToolButton()
+        self.cuts_btn.setText("Cuts…")
+        self.cuts_btn.setToolTip("Type the minimum / maximum for the user scalings (or drag the colour bar handles)")
+        self.cuts_btn.clicked.connect(self.userCutsRequested)
         self.cursor_btns = []
         for text, tip, mode in (("+", "Crosshair: click / arrows select a spaxel", 1),
                                 ("Sel", "Mask select: click / drag to add spaxels to the current mask", 2),
@@ -131,7 +136,8 @@ class SpaxelView(QWidget):
             b.setText(text)
             b.setCheckable(True)
             b.setToolTip(tip)
-            b.clicked.connect(lambda _=False, m=mode: self.cursorModeSelected.emit(m))
+            # clicking the active button switches the cursor off (crosshair) or back to the crosshair (mask modes)
+            b.clicked.connect(lambda checked=False, m=mode: self.cursorModeSelected.emit(m if checked else (0 if m == 1 else 1)))
             self.cursor_btns.append(b)
         self.cursor_btns[0].setChecked(True)
         tb.addWidget(QLabel("Cube"))
@@ -140,6 +146,7 @@ class SpaxelView(QWidget):
         tb.addWidget(self.mode_combo)
         tb.addWidget(QLabel("Scale"))
         tb.addWidget(self.zcut_combo)
+        tb.addWidget(self.cuts_btn)
         tb.addWidget(self.colour_combo)
         tb.addWidget(self.invert_btn)
         tb.addSpacing(10)
@@ -219,9 +226,10 @@ class SpaxelView(QWidget):
         lo, hi = self.colorbar.levels()
         self.levelsDragged.emit(float(lo), float(hi))
 
-    def set_display(self, data, levels, cmap: pg.ColorMap, label: str, linear: bool) -> None:
-        """Show ``data`` (NaN = bad, drawn white) with ``levels``; the colour bar is
-        interactive only for linear scalings (its ticks are real values then)."""
+    def set_display(self, data, levels, cmap: pg.ColorMap, label: str, linear: bool, ticks=None) -> None:
+        """Show ``data`` (NaN = bad, drawn white) with ``levels``. The colour bar is
+        interactive only for linear scalings; for the others ``ticks`` gives
+        ``[(position, label), ...]`` with the real data values along the bar."""
         self._levels_from_code = True
         try:
             self.image.setImage(data, autoLevels=False)
@@ -230,8 +238,8 @@ class SpaxelView(QWidget):
             self.colorbar.setColorMap(cmap)
             self.colorbar.setLevels(levels)
             self.colorbar.interactive = linear
-            self.colorbar.axis.setStyle(showValues=linear)
-            self.colorbar.axis.setStyle(showValues=linear, tickLength=5 if linear else 0)
+            self.colorbar.axis.setStyle(showValues=True, tickLength=5)
+            self.colorbar.axis.setTicks(None if linear else [list(ticks or [])])
             self.colorbar.axis.setLabel(label)
         finally:
             self._levels_from_code = False

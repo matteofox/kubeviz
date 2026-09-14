@@ -41,8 +41,13 @@ def zscale_range(image, contrast=0.25):
     return float(lo), float(hi)
 
 
-def hist_equal(image, nbins=1024):
-    """Histogram equalisation to [0,1] (IDL ``hist_equal``). Returns (scaled, (min, max))."""
+def hist_equal(image, nbins=None):
+    """Exact (rank based) histogram equalisation to [0,1]. Returns (scaled, (min, max)).
+
+    IDL ``hist_equal`` binned the data over the full min-max range, so a few bright
+    or bad pixels squeezed everything else into a handful of bins; the rank of each
+    pixel gives the same mapping without that failure mode.
+    """
     img = np.asarray(image, dtype=float)
     finite = np.isfinite(img)
     out = np.full(img.shape, np.nan)
@@ -53,11 +58,10 @@ def hist_equal(image, nbins=1024):
     if vmin == vmax:
         out[finite] = 0.0
         return out, (vmin, vmax)
-    hist, edges = np.histogram(vals, bins=nbins, range=(vmin, vmax))
-    cdf = np.cumsum(hist).astype(float)
-    cdf /= cdf[-1]
-    idx = np.clip(((vals - vmin) / (vmax - vmin) * nbins).astype(int), 0, nbins - 1)
-    out[finite] = cdf[idx]
+    srt = np.sort(vals)
+    lo = np.searchsorted(srt, vals, "left")
+    hi = np.searchsorted(srt, vals, "right")
+    out[finite] = 0.5 * (lo + hi - 1) / max(vals.size - 1, 1)   # mid-rank of ties
     return out, (vmin, vmax)
 
 

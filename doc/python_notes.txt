@@ -73,8 +73,9 @@ step through wavelength planes (in addition to "<" and ">").
   Images       "Save Image as PNG" replaces "Save Image as EPS".
   MC plots     PNG files instead of EPS.
 
-Sessions saved automatically on quit (lastsession.kvz) and in batch mode do not
-store the Monte Carlo realisations; they are recreated when the session is
+Nothing is saved when you quit: use File -> Save Session when you want to keep the
+state (the IDL version wrote lastsession.sav on exit). Sessions saved from the GUI
+or in batch mode do not store the Monte Carlo realisations; they are recreated when the session is
 reopened (MC1/2/3 use fixed random seeds, bootstrap cubes are re-read from the
 original file).
 

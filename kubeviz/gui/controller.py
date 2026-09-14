@@ -206,10 +206,6 @@ class KubevizGUI(QMainWindow):
             return
         self._closed = True
         utils.info("Quitting...")
-        try:
-            save_session(self.state, os.path.join(self.state.cwdir or ".", "lastsession" + SESSION_EXT), light=True)
-        except Exception as exc:  # pragma: no cover
-            utils.warn(f"Could not save lastsession: {exc}")
         self._save_layout()
         utils.log.removeHandler(self._log_handler)
 
@@ -240,38 +236,10 @@ class KubevizGUI(QMainWindow):
         self._add_menu(mb, "File", [("Open...", "Open"), ("Save Image as PNG...", "Print"), ("Save Image as FITS...", "SaveImage"),
                                     ("Save Cube as FITS...", "SaveCube"), ("Display FITS Header", "DisplayHeader"),
                                     ("Save Session...", "SaveSession"), ("Load Session...", "LoadSession"), None, ("Quit", "Quit")])
-        self.cube_group = QActionGroup(self)
-        self._add_menu(mb, "Cube", [("Data", "Data"), ("Noise", "Noise"), ("BadPixels", "BadPixels"), ("S/N", "SN"), None,
-                                    ("Linefit", "Linefit"), ("Linefit errors", "LineErrors"), ("Linefit S/N", "LineSN")], self.cube_group)
-        self.zcut_group = QActionGroup(self)
-        self._add_menu(mb, "Zcut", [("HistEq", "HistEq"), ("Zscale", "Zscale"), ("MinMax", "MinMax"), ("99.5%", "99.5"), ("99%", "99.0"),
-                                    ("97%", "97.0"), ("95%", "95.0"), None, ("User linear", "UserLin"), ("User sqrt", "UserSqrt"),
-                                    ("User log10", "UserLog")], self.zcut_group)
-        mzc = self.menuBar().actions()[2].menu()
-        mzc.addSeparator()
-        a = QAction("User Parameters...", self)
-        a.triggered.connect(lambda: self.menu_action("UserPars"))
-        mzc.addAction(a)
-        self.colour_group = QActionGroup(self)
-        self._add_menu(mb, "Colour", [(name, name) for name, _ in COLOUR_TABLES], self.colour_group)
-        mcol = self.menuBar().actions()[3].menu()
-        mcol.addSeparator()
-        a = QAction("Invert", self)
-        a.setCheckable(True)
-        a.triggered.connect(lambda: self.menu_action("Invert"))
-        mcol.addAction(a)
-        self.actions["Invert"] = a
-        self.cursor_group = QActionGroup(self)
-        self._add_menu(mb, "Cursor", [("Crosshair", "Crosshair"), ("None", "None")], self.cursor_group)
         self._add_menu(mb, "Spax.Masks", [("Select", "Select"), ("Deselect", "Deselect"), ("Clear", "Clear"), ("Optimal Mask", "OptimalMask"), None,
                                           ("New Mask", "NewMask"), ("Save...", "SAVE"), ("Load...", "Load"), ("Delete Mask", "DeleteMask"), None,
                                           ("Go to Mask...", "GoToMask"), ("Previous Mask", "PrevMask"), ("Next Mask", "NextMask"), None,
                                           ("Mask Parameters...", "MaskPars")])
-        self.mode_group = QActionGroup(self)
-        self._add_menu(mb, "Mode", [("Slice", "Slice"), None, ("Sum1", "Sum1"), ("Median1", "Median1"), ("Weighted Avg1", "WeightedAvg1"),
-                                    ("Weighted Med1", "WeightedMed1"), ("MedSub1", "MedSub1"), None, ("Sum2", "Sum2"), ("Median2", "Median2"),
-                                    ("Weighted Avg2", "WeightedAvg2"), ("Weighted Med2", "WeightedMed2"), ("MedSub2", "MedSub2"), None,
-                                    ("Med2-Med1", "Med2-Med1"), ("Med1-Med2", "Med1-Med2")], self.mode_group)
         self.err_group = QActionGroup(self)
         self._add_menu(mb, "Errors", [("Use Noise-cube", "NoiseErrors"), ("Use Bootstraps", "BootstrapErrors"), ("Use Monte Carlo 1", "Mc1Errors"),
                                       ("Use Monte Carlo 2", "Mc2Errors"), ("Use Monte Carlo 3", "Mc3Errors")], self.err_group)
@@ -287,23 +255,9 @@ class KubevizGUI(QMainWindow):
 
     def _sync_menu_checks(self):
         st = self.state
-        cube = {CUBE_DATA: "Data", CUBE_NOISE: "Noise", CUBE_BADPIX: "BadPixels", CUBE_SN: "SN", CUBE_LINEFIT: "Linefit",
-                CUBE_LINEFIT_ERR: "LineErrors", CUBE_LINEFIT_SN: "LineSN"}[st.cubesel]
-        self.actions[cube].setChecked(True)
-        zc = {ZCUT_HISTEQ: "HistEq", ZCUT_ZSCALE: "Zscale", ZCUT_MINMAX: "MinMax", ZCUT_995: "99.5", ZCUT_990: "99.0", ZCUT_970: "97.0",
-              ZCUT_950: "95.0", ZCUT_USER_LIN: "UserLin", ZCUT_USER_SQRT: "UserSqrt", ZCUT_USER_LOG: "UserLog"}.get(st.zcuts)
-        if zc:
-            self.actions[zc].setChecked(True)
-        for name, num in COLOUR_TABLES:
-            if num == st.ctab:
-                self.actions[name].setChecked(True)
-        self.actions["Invert"].setChecked(st.invert == 1)
-        self.actions["Crosshair" if st.cursormode == 1 else "None"].setChecked(st.cursormode in (0, 1))
-        modes = ["Slice", "Sum1", "Median1", "WeightedAvg1", "WeightedMed1", "MedSub1", "Sum2", "Median2", "WeightedAvg2",
-                 "WeightedMed2", "MedSub2", "Med2-Med1", "Med1-Med2"]
-        self.actions[modes[st.imgmode]].setChecked(True)
-        err = {ERR_NOISE: "NoiseErrors", ERR_BOOTSTRAP: "BootstrapErrors", ERR_MC1: "Mc1Errors", ERR_MC2: "Mc2Errors", ERR_MC3: "Mc3Errors"}[st.domontecarlo]
-        self.actions[err].setChecked(True)
+        err = {0: "NoiseErrors", 1: "BootstrapErrors", 2: "Mc1Errors", 3: "Mc2Errors", 4: "Mc3Errors"}.get(st.domontecarlo)
+        if err in self.actions:
+            self.actions[err].setChecked(True)
         self.actions["MonteCarloNoise"].setChecked(bool(st.useMonteCarlonoise))
         self.actions["MonteCarloPlot"].setChecked(bool(st.plotMonteCarlodistrib))
         self.actions["MonteCarloSave"].setChecked(bool(st.saveMonteCarlodistrib))
@@ -331,7 +285,8 @@ class KubevizGUI(QMainWindow):
         colour_codes = {num: name for name, num in COLOUR_TABLES}
         self.spax.colourSelected.connect(lambda v: self.menu_action(colour_codes[v]))
         self.spax.invertToggled.connect(lambda on: self.menu_action("Invert") if on != (self.state.invert == 1) else None)
-        self.spax.cursorModeSelected.connect(lambda m: self.menu_action({1: "Crosshair", 2: "Select", 3: "Deselect"}[m]))
+        self.spax.cursorModeSelected.connect(lambda m: self.menu_action({0: "None", 1: "Crosshair", 2: "Select", 3: "Deselect"}[m]))
+        self.spax.userCutsRequested.connect(lambda: self.menu_action("UserPars"))
         self.spec.wavelengthClicked.connect(self.on_spec_clicked)
         self.spec.keyPressed.connect(lambda ev: self.keyboard(ev, "spec"))
         self.spec.zminChanged.connect(self._set_zmin_spec)
@@ -439,7 +394,16 @@ class KubevizGUI(QMainWindow):
         if linear:
             self.spax.set_display(self._cached_image, (lo, hi), cmap, label, True)
         else:
-            self.spax.set_display(self._cached_scaled, (0.0, 1.0), cmap, f"{label}  [{ZCUT_NAMES.get(st.zcuts, '')}: {lo:.3g} … {hi:.3g}]", False)
+            pos = np.array([0.0, 0.25, 0.5, 0.75, 1.0])
+            if st.zcuts == ZCUT_HISTEQ:
+                vals = np.nanquantile(self._cached_image, pos) if np.any(np.isfinite(self._cached_image)) else pos
+            else:
+                f, finv = (np.sqrt, np.square) if st.zcuts == ZCUT_USER_SQRT else (np.log10, lambda y: 10.0 ** y)
+                lo_p = lo if lo > 0 else 1e-30
+                flo, fhi = f(lo_p), f(max(hi, lo_p * (1 + 1e-9)))
+                vals = finv(flo + pos * (fhi - flo))
+            ticks = [(float(p), _tick_label(v)) for p, v in zip(pos, vals)]
+            self.spax.set_display(self._cached_scaled, (0.0, 1.0), cmap, f"{label}  [{ZCUT_NAMES.get(st.zcuts, '')}]", False, ticks)
 
     def rerender(self):
         """Re-apply the colour table without recomputing the image (contrast drag)."""
@@ -1315,3 +1279,15 @@ class _StatusLogHandler(logging.Handler):
                 self.label.setText(msg.replace("[KUBEVIZ] ", "").replace("[PROGRES] ", ""))
         except Exception:  # pragma: no cover
             pass
+
+
+def _tick_label(v) -> str:
+    """Short, readable number for the colour bar ticks."""
+    v = float(v)
+    if not np.isfinite(v):
+        return ""
+    if v == 0:
+        return "0"
+    if 1e-2 <= abs(v) < 1e5:
+        return f"{v:.4g}" if abs(v) < 1000 else f"{v:.0f}"
+    return f"{v:.2e}"
