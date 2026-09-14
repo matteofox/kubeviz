@@ -7,3 +7,6 @@ dist/
 .venv/
 venv/
 .pytest_cache/
+lastsession.kvz
+*.kvz
+fit_errmsg_*.txt

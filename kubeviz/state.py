@@ -130,6 +130,7 @@ class State:
     imgmode: int = 0
     flagmode: bool = True
     wavsel: int = 1
+    npress: int = 0                                 # 's' key presses while selecting a range
     wavrange1: np.ndarray = field(default_factory=lambda: np.zeros(2, dtype=int))
     wavrange2: np.ndarray = field(default_factory=lambda: np.zeros(2, dtype=int))
     spaxrange: np.ndarray = field(default_factory=lambda: np.zeros(4, dtype=int))
