@@ -24,3 +24,18 @@ def prepare_qt_environment() -> None:
             os.environ["QT_PLUGIN_PATH"] = plugins
             os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = os.path.join(plugins, "platforms")
             return
+
+
+APP_FONT_POINTS = 12
+
+
+def apply_app_font(points: int = APP_FONT_POINTS) -> None:
+    """One font size for the whole GUI (widgets, plots and dialogs)."""
+    from PyQt6.QtWidgets import QApplication
+    app = QApplication.instance()
+    if app is None:
+        return
+    f = app.font()
+    if f.pointSize() != points:
+        f.setPointSize(points)
+        app.setFont(f)

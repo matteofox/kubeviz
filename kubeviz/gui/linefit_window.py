@@ -20,15 +20,15 @@ from PyQt6.QtWidgets import (QButtonGroup, QCheckBox, QFrame, QGridLayout, QHBox
                              QSizePolicy, QToolButton, QVBoxLayout, QWidget)
 
 from .. import utils
+from .qtenv import APP_FONT_POINTS
 from ..constants import (CKMS, ERR_METHOD_NAMES, FIT_GAUSS, INSTRRES_EXTPOLY, INSTRRES_TEMPLATE,
                          INSTRRES_VARPOLY, MODE_SPAXEL, NOT_FIT)
 
 PANEL_STYLE = """
-QLabel, QCheckBox, QRadioButton, QPushButton, QToolButton, QLineEdit, QComboBox { font-size: 12px; }
 QLineEdit { padding: 1px 3px; }
 QPushButton { padding: 3px 6px; }
-QPushButton#action { min-height: 30px; font-size: 13px; }
-QPushButton#save { min-height: 30px; font-size: 13px; font-weight: bold; }
+QPushButton#action { min-height: 30px; }
+QPushButton#save { min-height: 30px; font-weight: bold; }
 """
 
 INSTRRES_MODE_TEXT = {INSTRRES_VARPOLY: "(polynomial fit to cube variance)",
@@ -39,6 +39,7 @@ INSTRRES_MODE_TEXT = {INSTRRES_VARPOLY: "(polynomial fit to cube variance)",
 def _mono_font():
     f = QFont("Menlo")
     f.setStyleHint(QFont.StyleHint.Monospace)
+    f.setPointSize(APP_FONT_POINTS)
     return f
 
 

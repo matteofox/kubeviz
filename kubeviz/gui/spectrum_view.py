@@ -81,7 +81,7 @@ class SpectrumView(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(2, 2, 2, 2)
         self.plot = _ClickablePlot()
-        self.plot.setLabel("bottom", "Wavelength (Å)")
+        self.plot.setLabel("bottom", "Wavelength (Å)", **{"font-size": "12pt"})
         self.plot.plotItem.setMenuEnabled(False)
         self.plot.plotItem.vb.setMouseEnabled(x=True, y=True)
         self.title = self.plot.plotItem.titleLabel
@@ -196,7 +196,7 @@ class SpectrumView(QWidget):
             self.curve2.setVisible(True)
         else:
             self.curve2.setVisible(False)
-        self.plot.setTitle(title, size="10pt")
+        self.plot.setTitle(title, size="12pt")
         vb = self.plot.plotItem.vb
         new_wave = self._wave_id != (id(wave), len(wave))
         if new_wave:

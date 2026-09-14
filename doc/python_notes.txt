@@ -27,7 +27,8 @@ underscores are accepted): --noisefile, --ext, --noise-ext, --trim, --fluxfac,
 One main window. The spaxel viewer is the central panel: a toolbar (cube, image
 mode, intensity scaling, colour table, invert, cursor mode), the image with an
 interactive colour bar (drag the bar handles to set the cuts; the bar is labelled
-with the displayed quantity), the wavelength slider and a one-line info strip.
+with the displayed quantity), the wavelength slider and an info row (spaxel, value, RA/Dec, mask, smoothing; the
+position in the original cube appears only for a trimmed cube). All text is 12 pt.
 The other panels are dock widgets in the right column: Spectrum, Spectral zoom
 and Line fitting. The last one holds the Fit results table (one row per line;
 the rows of the second component appear with the "2nd component rows" switch,

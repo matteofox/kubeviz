@@ -211,6 +211,7 @@ class TextDialog(QDialog):
         font = edit.font()
         font.setFamily("Menlo")
         font.setStyleHint(font.StyleHint.Monospace)
+        font.setPointSize(12)
         edit.setFont(font)
         edit.setPlainText(text)
         lay.addWidget(edit)

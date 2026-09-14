@@ -42,6 +42,7 @@ from ..io.spectra import savecube, saveimage, savespec
 from . import dialogs
 from .fitoverlay import fit_overlays
 from .linefit_window import LinefitPanels
+from .qtenv import apply_app_font
 from .scaling import (COLOUR_TABLES, ZCUT_HISTEQ, ZCUT_MINMAX, ZCUT_NAMES, ZCUT_USER_LIN, ZCUT_USER_LOG,
                       ZCUT_USER_SQRT, ZCUT_ZSCALE, ZCUT_950, ZCUT_970, ZCUT_990, ZCUT_995, colour_table,
                       contrast_lut_indices, scale_image)
@@ -90,6 +91,7 @@ class KubevizGUI(QMainWindow):
         self._nomove = False
         self._paint_value = 1
 
+        apply_app_font()
         self.setWindowTitle(f"kubeviz: {state.filename}")
         self.setDockNestingEnabled(True)
         self.spax = SpaxelView()
@@ -121,7 +123,7 @@ class KubevizGUI(QMainWindow):
         # status bar: last log message, progress and interrupt
         sb = self.statusBar()
         sb.setSizeGripEnabled(False)
-        sb.setStyleSheet("QStatusBar { min-height: 20px; max-height: 22px; font-size: 12px; } QStatusBar::item { border: none; }")
+        sb.setStyleSheet("QStatusBar { min-height: 20px; max-height: 22px; } QStatusBar::item { border: none; }")
         sb.setContentsMargins(4, 0, 4, 0)
         self.status_label = QLabel("")
         self.status_label.setContentsMargins(0, 0, 0, 0)
@@ -401,13 +403,14 @@ class KubevizGUI(QMainWindow):
                 ra, dec = w.all_pix2world([[st.col + st.Startcol, st.row + st.Startrow]], 0)[0]
                 ras = Angle(ra, u.deg).to_string(unit=u.hour, sep=":", precision=2, pad=True)
                 decs = Angle(dec, u.deg).to_string(unit=u.deg, sep=":", precision=1, alwayssign=True, pad=True)
-                wcs = f"{ras}  {decs}"
+                wcs = f"<span style='color:#6b6b6b'>RA</span>&nbsp; {ras} &nbsp;&nbsp; <span style='color:#6b6b6b'>Dec</span>&nbsp; {decs}"
             else:
-                wcs = "(SPATIAL WCS NOT FOUND)"
+                wcs = "<span style='color:#6b6b6b'>No spatial WCS</span>"
         except Exception:
-            wcs = "(SPATIAL WCS NOT FOUND)"
+            wcs = "<span style='color:#6b6b6b'>No spatial WCS</span>"
+        trimmed = bool(st.Startcol or st.Startrow)
         self.spax.set_info(st.col, st.row, st.col + st.Startcol, st.row + st.Startrow, val,
-                           f"{st.imask}/{st.Nmask}", wcs, f"{st.smooth}x{st.smooth}x{st.specsmooth}")
+                           f"{st.imask}/{st.Nmask}", wcs, f"{st.smooth}x{st.smooth}x{st.specsmooth}", trimmed)
 
     def _showspec(self):
         st = self.state

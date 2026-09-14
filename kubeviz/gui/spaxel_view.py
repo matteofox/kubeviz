@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QPainterPath, QPen
+from PyQt6.QtGui import QColor, QPainterPath, QPen
 from PyQt6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QPushButton, QSlider, QToolButton,
                              QVBoxLayout, QWidget)
 
@@ -210,15 +210,19 @@ class SpaxelView(QWidget):
         sl.addWidget(self.slice_label)
         lay.addLayout(sl)
 
-        # ---------------- info strip
-        self.info = QLabel(" ")
-        f = QFont("Menlo")
-        f.setStyleHint(QFont.StyleHint.Monospace)
-        f.setPointSize(13)
-        self.info.setFont(f)
-        self.info.setContentsMargins(2, 2, 2, 2)
-        self.info.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        lay.addWidget(self.info)
+        # ---------------- info strip: fields spread along the row
+        info_row = QHBoxLayout()
+        info_row.setContentsMargins(4, 2, 4, 2)
+        self.info_fields = {}
+        for key in ("spaxel", "orig", "value", "wcs", "mask", "smooth"):
+            lbl = QLabel("")
+            lbl.setTextFormat(Qt.TextFormat.RichText)
+            lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            self.info_fields[key] = lbl
+            info_row.addWidget(lbl)
+            info_row.addStretch(1)
+        self.info_fields["orig"].setVisible(False)
+        lay.addLayout(info_row)
 
     # ------------------------------------------------------------------ colour bar
     def _levels_finished(self, *args):
@@ -241,7 +245,7 @@ class SpaxelView(QWidget):
             self.colorbar.interactive = linear
             self.colorbar.axis.setStyle(showValues=True, tickLength=5)
             self.colorbar.axis.setTicks(None if linear else [list(ticks or [])])
-            self.colorbar.axis.setLabel(label)
+            self.colorbar.axis.setLabel(label, **{"font-size": "12pt"})
             self.colorbar.axis.setWidth(84)      # room for tick text and the label side by side
         finally:
             self._levels_from_code = False
@@ -276,12 +280,25 @@ class SpaxelView(QWidget):
         self.slider.setRange(0, max(nwpix - 1, 0))
         self.slider.setValue(int(wpix))
         self.slider.blockSignals(False)
-        txt = f"slice {wpix}" if wave is None else f"slice {wpix}   λ = {wave:.2f} Å"
+        txt = f"Slice {wpix}" if wave is None else f"Slice {wpix}   λ = {wave:.2f} Å"
         self.slice_label.setText(txt)
 
-    def set_info(self, col, row, pcol, prow, value: float, mask: str, wcs: str, smooth: str) -> None:
+    @staticmethod
+    def _field(name: str, value: str) -> str:
+        return f"<span style='color:#6b6b6b'>{name}</span>&nbsp; {value}"
+
+    def set_info(self, col, row, pcol, prow, value: float, mask: str, wcs: str, smooth: str,
+                 trimmed: bool = False) -> None:
+        """Fill the info strip; the original-cube position is shown only for a trimmed cube."""
         val = "NaN" if not np.isfinite(value) else f"{value:.4g}"
-        self.info.setText(f"({col:>4},{row:>4})  phys ({pcol:>4},{prow:>4})  value {val:<12} {wcs}   mask {mask}   smooth {smooth}")
+        f = self.info_fields
+        f["spaxel"].setText(self._field("Spaxel", f"({col}, {row})"))
+        f["orig"].setText(self._field("Original cube", f"({pcol}, {prow})"))
+        f["orig"].setVisible(trimmed)
+        f["value"].setText(self._field("Value", val))
+        f["wcs"].setText(wcs)
+        f["mask"].setText(self._field("Mask", mask))
+        f["smooth"].setText(self._field("Smooth", smooth))
 
     def sync_controls(self, cubesel, imgmode, zcuts, ctab, invert, cursormode) -> None:
         for combo, value in ((self.cube_combo, cubesel), (self.mode_combo, imgmode),

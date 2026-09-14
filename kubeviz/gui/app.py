@@ -15,6 +15,8 @@ def run_gui(state, args: dict | None = None) -> int:
 
     app = QApplication.instance() or QApplication(sys.argv[:1])
     app.setApplicationName("kubeviz")
+    from .qtenv import apply_app_font
+    apply_app_font()
     if state is None:
         from .controller import open_cube_interactively
         state = open_cube_interactively(args or {})
