@@ -35,7 +35,7 @@ automatically when a second component is fitted), the Fit setup, Options and
 Status groups, which fold away, and the grid of action buttons (current
 spaxel/mask on the top row, all spaxels/masks below). Docks can be dragged to
 other positions, floated or closed (reopen with Options -> Show linefit window /
-Toggle Zoom); the layout is remembered between sessions. Spectra are drawn as
+Toggle Zoom); every start uses the default layout. Spectra are drawn as
 steps (edges half way between wavelengths), fits as lines.
 The status bar shows the last message and,
 during long fits, a progress bar with an Interrupt button.

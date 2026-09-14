@@ -13,7 +13,7 @@ import os
 import numpy as np
 import logging
 
-from PyQt6.QtCore import QSettings, Qt
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QActionGroup
 from PyQt6.QtWidgets import (QApplication, QDockWidget, QFileDialog, QLabel, QMainWindow, QMessageBox,
                              QProgressBar, QPushButton)
@@ -148,7 +148,6 @@ class KubevizGUI(QMainWindow):
         self.linefit = None
         self._install_linefit()
         self.spax.reset_view(state.Ncol, state.Nrow)
-        self._restore_layout()
         self.zoom_dock.setVisible(bool(state.zoommap))
         self.update_all(UPDATE_FULL)
 
@@ -173,23 +172,6 @@ class KubevizGUI(QMainWindow):
         if visible:
             self.plotspeczoom()
 
-    def _settings(self):
-        return QSettings("kubeviz", "gui")
-
-    def _restore_layout(self):
-        s = self._settings()
-        geo = s.value("geometry")
-        st = s.value("windowState_v2")
-        if geo is not None:
-            self.restoreGeometry(geo)
-        if st is not None:
-            self.restoreState(st)
-
-    def _save_layout(self):
-        s = self._settings()
-        s.setValue("geometry", self.saveGeometry())
-        s.setValue("windowState_v2", self.saveState())
-
     def _request_cancel(self):
         self._cancel_requested = True
 
@@ -209,7 +191,6 @@ class KubevizGUI(QMainWindow):
             return
         self._closed = True
         utils.info("Quitting...")
-        self._save_layout()
         utils.log.removeHandler(self._log_handler)
 
     def quit(self):
