@@ -128,7 +128,8 @@ class SpectrumView(QWidget):
         tool("Save", "Save the displayed spectrum as FITS", self.saveRequested)
 
         self.range_btn = QToolButton()
-        self.range_btn.setText("Range")
+        self.range_btn.setText("Range ")
+        self.range_btn.setMinimumWidth(72)
         self.range_btn.setToolTip("Select spectral ranges for the summed / median images (Range1, Range2)")
         self.range_btn.setAutoRaise(True)
         self.range_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)

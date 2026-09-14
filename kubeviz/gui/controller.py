@@ -196,10 +196,15 @@ class KubevizGUI(QMainWindow):
         self.state.linefitmap = self.table_dock.isVisible()
 
     def closeEvent(self, ev):
-        self.quit()
+        # Qt 6 closes the top-level windows when the application quits, so this runs
+        # both for the window close button and for File -> Quit; shut down only once
+        self._shutdown()
         ev.accept()
 
-    def quit(self):
+    def _shutdown(self):
+        if getattr(self, "_closed", False):
+            return
+        self._closed = True
         utils.info("Quitting...")
         try:
             save_session(self.state, os.path.join(self.state.cwdir or ".", "lastsession" + SESSION_EXT), light=True)
@@ -207,6 +212,9 @@ class KubevizGUI(QMainWindow):
             utils.warn(f"Could not save lastsession: {exc}")
         self._save_layout()
         utils.log.removeHandler(self._log_handler)
+
+    def quit(self):
+        self._shutdown()
         QApplication.instance().quit()
 
     # ================================================================== menus

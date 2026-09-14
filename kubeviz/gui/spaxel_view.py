@@ -160,7 +160,7 @@ class SpaxelView(QWidget):
 
         # ---------------- image + colour bar
         self.glw = pg.GraphicsLayoutWidget()
-        self.glw.ci.layout.setContentsMargins(0, 0, 0, 0)
+        self.glw.ci.layout.setContentsMargins(0, 10, 0, 8)   # room for the colour bar tick labels
         self.vb = SpaxelViewBox()
         self.glw.addItem(self.vb, 0, 0)
         self.image = pg.ImageItem()
