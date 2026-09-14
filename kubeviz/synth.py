@@ -60,7 +60,7 @@ def make_synthetic_cube(fname: str | None = None, nx: int = 12, ny: int = 10, re
             bflux = 0.3 * fmap
             cube += bflux[None] / np.sqrt(2 * np.pi * bt2)[None] * np.exp(-0.5 * (wave[:, None, None] - xcen[None]) ** 2 / bt2[None])
             truth["bflux_" + name] = bflux
-    cube += cont[None] * (1.0 + 0.05 * (wave[:, None, None] - wave.mean()) / wave.ptp())
+    cube += cont[None] * (1.0 + 0.05 * (wave[:, None, None] - wave.mean()) / np.ptp(wave))
     noise = np.full(cube.shape, noise_level) * (1.0 + 0.2 * rng.random((nwave, 1, 1)))
     cube_noisy = cube + rng.standard_normal(cube.shape) * noise
     if nan_corner:
