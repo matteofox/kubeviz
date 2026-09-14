@@ -232,24 +232,28 @@ class Progress:
         self.count = 0
         self.t_start = time.time()
         self._last_percent = -1
+        self._last_cb_percent = -1
+
+    def _message(self, percent: int) -> str:
+        elapsed = time.time() - self.t_start
+        if percent < 100:
+            eta = elapsed / percent * (100 - percent)
+            return f"[PROGRES] {percent}% {self.label} - ETA: {_fmt_eta(eta)}"
+        return f"[PROGRES] 100% {self.label} - Time elapsed: {_fmt_eta(elapsed)}"
 
     def step(self, n: int = 1) -> None:
         self.count += n
-        percent = int(100.0 * self.count / self.total)
-        percent = percent - percent % self.percent_step
+        percent_exact = int(100.0 * self.count / self.total)
+        percent = percent_exact - percent_exact % self.percent_step
         if percent != self._last_percent and percent > 0:
             self._last_percent = percent
-            elapsed = time.time() - self.t_start
-            if percent < 100:
-                eta = elapsed / percent * (100 - percent)
-                msg = f"[PROGRES] {percent}% {self.label} - ETA: {_fmt_eta(eta)}"
-            else:
-                msg = f"[PROGRES] 100% {self.label} - Time elapsed: {_fmt_eta(elapsed)}"
             if not self.quiet:
-                sys.stdout.write("\r" + msg.ljust(70))
+                sys.stdout.write("\r" + self._message(percent).ljust(70))
                 sys.stdout.flush()
-            if self.callback is not None:
-                self.callback(self.count / self.total, msg)
+        # the GUI callback is finer (every percent) than the terminal line
+        if self.callback is not None and percent_exact != self._last_cb_percent and percent_exact > 0:
+            self._last_cb_percent = percent_exact
+            self.callback(self.count / self.total, self._message(percent_exact))
 
     def close(self) -> None:
         if not self.quiet and self._last_percent >= 0:

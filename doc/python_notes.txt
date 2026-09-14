@@ -37,8 +37,9 @@ spaxel/mask on the top row, all spaxels/masks below). Docks can be dragged to
 other positions, floated or closed (reopen with Options -> Show linefit window /
 Toggle Zoom); every start uses the default layout. Spectra are drawn as
 steps (edges half way between wavelengths), fits as lines.
-The status bar shows the last message and,
-during long fits, a progress bar with an Interrupt button.
+The status bar shows the last message. During FIT ALL / FIT ADJ ALL the
+Status row of the Line fitting panel shows a progress bar and an Interrupt
+button, and the crosshair follows the spaxel being fitted.
 
 ** Mouse in the spaxel viewer **
 

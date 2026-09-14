@@ -279,10 +279,9 @@ class SpaxelView(QWidget):
         txt = f"slice {wpix}" if wave is None else f"slice {wpix}   λ = {wave:.2f} Å"
         self.slice_label.setText(txt)
 
-    def set_info(self, col, row, pcol, prow, value: float, mask: str, cube: str, wcs: str,
-                 smooth: str, imgmode: str) -> None:
+    def set_info(self, col, row, pcol, prow, value: float, mask: str, wcs: str, smooth: str) -> None:
         val = "NaN" if not np.isfinite(value) else f"{value:.4g}"
-        self.info.setText(f"({col:>4},{row:>4})  phys ({pcol:>4},{prow:>4})  value {val:<12} {wcs}   mask {mask}  smooth {smooth}   {cube} · {imgmode}")
+        self.info.setText(f"({col:>4},{row:>4})  phys ({pcol:>4},{prow:>4})  value {val:<12} {wcs}   mask {mask}   smooth {smooth}")
 
     def sync_controls(self, cubesel, imgmode, zcuts, ctab, invert, cursormode) -> None:
         for combo, value in ((self.cube_combo, cubesel), (self.mode_combo, imgmode),

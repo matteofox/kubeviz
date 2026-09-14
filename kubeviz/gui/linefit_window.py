@@ -16,8 +16,8 @@ import numpy as np
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (QButtonGroup, QCheckBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
-                             QLineEdit, QPushButton, QRadioButton, QScrollArea, QSizePolicy,
-                             QToolButton, QVBoxLayout, QWidget)
+                             QLineEdit, QProgressBar, QPushButton, QRadioButton, QScrollArea,
+                             QSizePolicy, QToolButton, QVBoxLayout, QWidget)
 
 from .. import utils
 from ..constants import (CKMS, ERR_METHOD_NAMES, FIT_GAUSS, INSTRRES_EXTPOLY, INSTRRES_TEMPLATE,
@@ -462,7 +462,22 @@ class LinefitPanels:
         self.lbl_mc = QLabel("")
         g.addWidget(self.lbl_mc)
         g.addStretch(1)
-        lay.addWidget(Collapsible("Status", status, expanded=True))
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 1000)
+        self.progress_bar.setFixedWidth(220)
+        self.progress_bar.setMaximumHeight(16)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setVisible(False)
+        g.addWidget(self.progress_bar)
+        self.interrupt_btn = QPushButton("Interrupt")
+        self.interrupt_btn.setToolTip("Stop the running loop after the current spaxel")
+        self.interrupt_btn.setStyleSheet("background-color: #e06060; color: white; font-weight: bold")
+        self.interrupt_btn.setVisible(False)
+        g.addWidget(self.interrupt_btn)
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        lay.addWidget(sep)
+        lay.addWidget(status)          # always visible, just above the action buttons
 
         # ---- actions (always visible): one column per topic, current selection on top, all below
         grid = QGridLayout()

@@ -15,8 +15,7 @@ import logging
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QActionGroup
-from PyQt6.QtWidgets import (QApplication, QDockWidget, QFileDialog, QLabel, QMainWindow, QMessageBox,
-                             QProgressBar, QPushButton)
+from PyQt6.QtWidgets import QApplication, QDockWidget, QFileDialog, QLabel, QMainWindow, QMessageBox
 
 from .. import utils
 from ..constants import (CUBE_BADPIX, CUBE_DATA, CUBE_LINEFIT, CUBE_LINEFIT_ERR, CUBE_LINEFIT_SN,
@@ -127,19 +126,7 @@ class KubevizGUI(QMainWindow):
         self.status_label = QLabel("")
         self.status_label.setContentsMargins(0, 0, 0, 0)
         sb.addWidget(self.status_label, 1)
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 1000)
-        self.progress_bar.setMaximumWidth(260)
-        self.progress_bar.setMaximumHeight(14)
-        self.progress_bar.setVisible(False)
-        sb.addPermanentWidget(self.progress_bar)
-        self.interrupt_btn = QPushButton("Interrupt")
-        self.interrupt_btn.setFlat(True)
-        self.interrupt_btn.setMaximumHeight(20)
-        self.interrupt_btn.setVisible(False)
         self._cancel_requested = False
-        self.interrupt_btn.clicked.connect(self._request_cancel)
-        sb.addPermanentWidget(self.interrupt_btn)
         self._log_handler = _StatusLogHandler(self.status_label)
         utils.log.addHandler(self._log_handler)
 
@@ -160,6 +147,7 @@ class KubevizGUI(QMainWindow):
             old.setParent(None)
             old.deleteLater()
         self.ctrl_dock.setWidget(self.linefit.controls)
+        self.linefit.interrupt_btn.clicked.connect(self._request_cancel)
 
     def show_table(self):
         self.ctrl_dock.show()
@@ -413,16 +401,13 @@ class KubevizGUI(QMainWindow):
                 ra, dec = w.all_pix2world([[st.col + st.Startcol, st.row + st.Startrow]], 0)[0]
                 ras = Angle(ra, u.deg).to_string(unit=u.hour, sep=":", precision=2, pad=True)
                 decs = Angle(dec, u.deg).to_string(unit=u.deg, sep=":", precision=1, alwayssign=True, pad=True)
-                wcs = f"({ras}, {decs}, {st.wave[st.wpix]:.2f})"
-            elif st.wave is not None and st.wave[0] > 0:
-                wcs = f"(SPATIAL WCS NOT FOUND, {st.wave[st.wpix]:.2f})"
+                wcs = f"{ras}  {decs}"
+            else:
+                wcs = "(SPATIAL WCS NOT FOUND)"
         except Exception:
-            if st.wave is not None and st.wave[0] > 0:
-                wcs = f"(SPATIAL WCS NOT FOUND, {st.wave[st.wpix]:.2f})"
-        imgmode = IMGMODE_NAMES[st.imgmode] if st.imgmode != IMG_SLICE else f"slice {st.wpix}"
+            wcs = "(SPATIAL WCS NOT FOUND)"
         self.spax.set_info(st.col, st.row, st.col + st.Startcol, st.row + st.Startrow, val,
-                           f"{st.imask}/{st.Nmask}", CUBESEL_NAMES[st.cubesel], wcs,
-                           f"{st.smooth}x{st.smooth}x{st.specsmooth}", imgmode)
+                           f"{st.imask}/{st.Nmask}", wcs, f"{st.smooth}x{st.smooth}x{st.specsmooth}")
 
     def _showspec(self):
         st = self.state
@@ -729,34 +714,47 @@ class KubevizGUI(QMainWindow):
         self._autoflag_current()
 
     def _run_with_progress(self, title, func):
-        """Run a long loop with progress and an Interrupt button in the status bar."""
+        """Run a long loop with a progress bar and an Interrupt button in the Status row
+        of the line-fitting panel; the crosshair follows the spaxel being fitted."""
+        import time
         st = self.state
+        lf = self.linefit
         self._cancel_requested = False
-        self.progress_bar.setValue(0)
-        self.progress_bar.setVisible(True)
-        self.interrupt_btn.setVisible(True)
+        lf.progress_bar.setValue(0)
+        lf.progress_bar.setFormat(f"{title} %p%")
+        lf.progress_bar.setVisible(True)
+        lf.interrupt_btn.setVisible(True)
         self.status_label.setText(f"{title}...")
         QApplication.processEvents()
+        last_draw = [0.0]
 
         def should_cancel():
             QApplication.processEvents()
             return self._cancel_requested
 
         def progress(fraction, message):
-            self.progress_bar.setValue(int(1000 * min(max(fraction, 0.0), 1.0)))
+            lf.progress_bar.setValue(int(1000 * min(max(fraction, 0.0), 1.0)))
             self.status_label.setText(message.replace("[PROGRES] ", ""))
             QApplication.processEvents()
 
         def on_fit(col, row):
-            if col is not None and st.Ncol < 200 and st.Nrow < 200:
-                self.plotspax(fast=True)
+            if col is not None:
+                self.spax.set_crosshair(col, row, visible=True)
+                now = time.time()
+                if now - last_draw[0] > 0.25:          # redraw the map a few times per second at most
+                    last_draw[0] = now
+                    if st.cubesel > CUBE_SN:
+                        self.plotspax(fast=True)
+                    lf.update_all()
             QApplication.processEvents()
 
         try:
             result = func(should_cancel, progress, on_fit)
         finally:
-            self.progress_bar.setVisible(False)
-            self.interrupt_btn.setVisible(False)
+            lf.progress_bar.setVisible(False)
+            lf.interrupt_btn.setVisible(False)
+            if self._cancel_requested:
+                self.status_label.setText(f"{title} interrupted")
         return result
 
     def do_change_redshift(self, z):
