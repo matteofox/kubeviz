@@ -42,7 +42,10 @@ the Fit results header; on displays below 900 px the Fit setup group starts fold
 steps (edges half way between wavelengths), fits as lines.
 The status bar shows the last message. During FIT ALL / FIT ADJ ALL the
 Status row of the Line fitting panel shows a progress bar and an Interrupt
-button, and the crosshair follows the spaxel being fitted.
+button, and the crosshair follows the spaxels being fitted. Both loops use forked
+worker processes (--nproc N; default all cores but one, at most 8). FIT ALL gives
+exactly the sequential results; in FIT ADJ ALL the spaxels of one pass start from
+the neighbour solutions at the beginning of the pass (--nproc 1 for the IDL order).
 
 ** Mouse in the spaxel viewer **
 

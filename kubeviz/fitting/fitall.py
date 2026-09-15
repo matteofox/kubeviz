@@ -41,6 +41,18 @@ def n_ok_adjacent(state, x, y, flag) -> int:
     return int(xn.size)
 
 
+def n_ok_adjacent_map(flag) -> np.ndarray:
+    """Number of OK (flag == 0) neighbours of every spaxel, vectorised (8-connectivity)."""
+    ok = np.pad((np.asarray(flag) == 0).astype(np.int32), 1)
+    nrow, ncol = flag.shape
+    out = np.zeros((nrow, ncol), dtype=np.int32)
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            if dx or dy:
+                out += ok[1 + dy:1 + dy + nrow, 1 + dx:1 + dx + ncol]
+    return out
+
+
 def guess_from_adjacent(state, x, y, flag, rs) -> bool:
     """Set ``state.gnfit``/``gbfit`` to the inverse-variance weighted mean of the OK
     neighbours' parameters. Returns False when no OK neighbour exists."""
@@ -63,14 +75,23 @@ def guess_from_adjacent(state, x, y, flag, rs) -> bool:
     return True
 
 
-def fitall(state, spaxel: bool = True, should_cancel=None, on_progress=None, on_fit=None) -> bool:
+def fitall(state, spaxel: bool = True, should_cancel=None, on_progress=None, on_fit=None,
+           nproc: int | None = None) -> bool:
     """Fit every spaxel in ``state.fitallrange`` (or every mask).
 
-    Returns True when the loop completed, False when cancelled.
+    Spaxels are fitted by ``nproc`` forked worker processes (default ``state.nproc``,
+    0 = all cores but one, at most 8); ``nproc=1`` runs the sequential loop. Masks are
+    always fitted sequentially. Returns True when the loop completed, False when cancelled.
     """
     state.zoomspax = 1
     completed = True
     if spaxel:
+        from .parallel import default_nproc, fitall_parallel, fork_available
+        nproc = int(state.nproc if nproc is None else nproc)
+        if nproc <= 0:
+            nproc = default_nproc()
+        if nproc > 1 and fork_available():
+            return fitall_parallel(state, nproc, should_cancel=should_cancel, on_progress=on_progress, on_fit=on_fit)
         c0, c1, r0, r1 = [int(v) for v in state.fitallrange]
         total = (c1 - c0 + 1) * (r1 - r0 + 1)
         prog = utils.Progress(total, state.percent_step, label="processed", callback=on_progress)
@@ -120,9 +141,21 @@ def fitadj(state) -> bool:
     return ok
 
 
-def fitadjall(state, should_cancel=None, on_progress=None, on_fit=None) -> int:
+def fitadjall(state, should_cancel=None, on_progress=None, on_fit=None, nproc: int | None = None) -> int:
     """Iteratively refit BAD spaxels adjacent to OK ones, most-OK-neighbours first.
-    Returns the number of spaxels whose fit was improved."""
+    Returns the number of spaxels whose fit was improved.
+
+    With ``nproc > 1`` (default ``state.nproc``) the spaxels of one pass are fitted by
+    forked workers, all with the neighbour solutions as they were at the start of the
+    pass; the flags are then updated in the sequential order. ``nproc=1`` reproduces
+    the IDL spaxel-by-spaxel order exactly.
+    """
+    from .parallel import FitPool, default_nproc, fitadj_pass_parallel, fork_available
+    nproc = int(state.nproc if nproc is None else nproc)
+    if nproc <= 0:
+        nproc = default_nproc()
+    parallel_ok = nproc > 1 and fork_available()
+    pool = None                     # forked once, on the first pass large enough to share
     rs = state.get_results()
     colstart, rowstart = state.col, state.row
     bad = state.badpixelimg
@@ -148,9 +181,7 @@ def fitadjall(state, should_cancel=None, on_progress=None, on_fit=None) -> int:
 
     while np.sum(badfit & hope) > 0 and niter >= 0:
         niter -= 1
-        ys, xs = np.nonzero(badfit & inrange)
-        for y, x in zip(ys, xs):
-            nokneigh[y, x] = n_ok_adjacent(state, x, y, flag)
+        nokneigh = np.where(badfit & inrange, n_ok_adjacent_map(flag), 0)
         hope[nokneigh == 0] = False
         nfitnow, ii = 0, 0
         for ii in range(8, 0, -1):
@@ -165,25 +196,42 @@ def fitadjall(state, should_cancel=None, on_progress=None, on_fit=None) -> int:
         if on_progress is not None:
             on_progress(1.0 - np.sum(badfit & hope) / max(nbad_init, 1), msg)
         ys, xs = np.nonzero(now)
-        for y, x in zip(ys, xs):
-            state.col, state.row = int(x), int(y)
-            if guess_from_adjacent(state, x, y, flag, rs):
-                dofit(state)
-                if on_fit is not None:
-                    on_fit(int(x), int(y))
+        if parallel_ok and nfitnow >= 4 * nproc:
+            if pool is None:
+                utils.info(f"FIT ADJ ALL with {nproc} worker processes")
+                pool = FitPool(state, nproc)
+            coords = list(zip(xs.tolist(), ys.tolist()))
+            fitted, cancelled = fitadj_pass_parallel(pool, rs, coords, flag, should_cancel, on_fit)
+            for x, y in fitted:                        # flags in the same order as the sequential loop
+                state.col, state.row = int(x), int(y)
                 newflag = adjflag(state, int(x), int(y))
-                flag = np.minimum(rs.n[..., 0], rs.b[..., 0])
                 if newflag == 0:
                     hope[max(y - 1, 0):min(y + 2, state.Nrow), max(x - 1, 0):min(x + 2, state.Ncol)] = True
                 else:
                     hope[y, x] = False
-            if should_cancel is not None and should_cancel():
-                cancelled = True
-                break
+            flag = np.minimum(rs.n[..., 0], rs.b[..., 0])
+        else:
+            for y, x in zip(ys, xs):
+                state.col, state.row = int(x), int(y)
+                if guess_from_adjacent(state, x, y, flag, rs):
+                    dofit(state)
+                    if on_fit is not None:
+                        on_fit(int(x), int(y))
+                    newflag = adjflag(state, int(x), int(y))
+                    flag = np.minimum(rs.n[..., 0], rs.b[..., 0])
+                    if newflag == 0:
+                        hope[max(y - 1, 0):min(y + 2, state.Nrow), max(x - 1, 0):min(x + 2, state.Ncol)] = True
+                    else:
+                        hope[y, x] = False
+                if should_cancel is not None and should_cancel():
+                    cancelled = True
+                    break
         if cancelled:
             break
         badfit = (~bad) & (flag > 0) & inrange
 
+    if pool is not None:
+        pool.close()
     _status_line(None)
     linefit_resetuser(state, all_pars=True, startonly=True)
     state.col, state.row = colstart, rowstart

@@ -13,6 +13,9 @@ import os
 
 
 def prepare_qt_environment() -> None:
+    # forked worker processes (parallel FIT ALL) must not trip the Objective-C runtime
+    # fork check once Cocoa is loaded by Qt
+    os.environ.setdefault("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES")
     if os.environ.get("KUBEVIZ_NO_QT_ENV_FIX"):
         return
     spec = importlib.util.find_spec("PyQt6")

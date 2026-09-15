@@ -201,3 +201,65 @@ def test_skylines_fit_runs_on_generic_instrument(tmp_path):
     assert np.isfinite(R)
     if state.instrres_mode == C.INSTRRES_VARPOLY and np.any(state.instrres_varpoly != 0):
         assert 1000 < R < 6000
+
+
+def test_fitall_parallel_matches_sequential(synth_cube):
+    from kubeviz.fitting.parallel import fork_available
+    if not fork_available():
+        import pytest
+        pytest.skip("fork start method not available")
+    state, truth = _session(synth_cube)
+    state.pndofit[:3] = 1
+    state.pcdofit[:3] = 1
+    state.fitallrange[:] = [2, 9, 2, 7]
+    fitall(state, nproc=1)
+    rs = state.get_results()
+    seq = {k: getattr(rs, k).copy() for k in ("n", "b", "c", "nerr", "berr", "cerr", "chisq")}
+    from kubeviz.fitting.linefit import linefit_init
+    linefit_init(state)                       # resets results and the FITALL range
+    state.fitallrange[:] = [2, 9, 2, 7]
+    assert np.all(state.get_results().nerr[..., 1, 0] == C.NOT_FIT)
+    assert fitall(state, nproc=2)
+    rs = state.get_results()
+    for k, v in seq.items():
+        np.testing.assert_array_equal(getattr(rs, k), v)
+    assert np.sum(rs.nerr[..., 1, 0] != C.NOT_FIT) > 20
+    # cancellation stops the pool and leaves the state usable
+    linefit_init(state)
+    state.fitallrange[:] = [2, 9, 2, 7]
+    calls = []
+    assert fitall(state, nproc=2, should_cancel=lambda: calls.append(1) or True) is False
+    assert state.get_results().n.shape == rs.n.shape
+
+
+def test_fitadjall_parallel(synth_cube):
+    from kubeviz.fitting.fitall import fitadjall, n_ok_adjacent, n_ok_adjacent_map
+    from kubeviz.fitting.parallel import fork_available
+    state, truth = _session(synth_cube)
+    state.pndofit[:3] = 1
+    state.pcdofit[:3] = 1
+    fitall(state, nproc=1)
+    autoflag(state)
+    rs = state.get_results()
+    # vectorised neighbour count agrees with the per-spaxel one
+    flag = np.minimum(rs.n[..., 0], rs.b[..., 0])
+    nmap = n_ok_adjacent_map(flag)
+    for y in range(state.Nrow):
+        for x in range(state.Ncol):
+            assert nmap[y, x] == n_ok_adjacent(state, x, y, flag)
+    # spoil a block of fits, then let FIT ADJ ALL repair it sequentially and in parallel
+    def spoil():
+        for y in range(3, 7):
+            for x in range(3, 8):
+                rs.n[y, x, 0] = 4                       # flagged bad
+                rs.n[y, x, 1] = 500.0                   # absurd velocity
+    spoil()
+    seq_gain = fitadjall(state, nproc=1)
+    seq_dv = rs.n[..., 1].copy()
+    if not fork_available():
+        return
+    spoil()
+    par_gain = fitadjall(state, nproc=2)
+    assert par_gain >= 0 and seq_gain >= 0
+    ok = (rs.n[..., 0] == 0) & (seq_dv != 0)
+    assert np.allclose(rs.n[..., 1][ok], seq_dv[ok], atol=5.0)   # same solutions within the noise
