@@ -189,8 +189,12 @@ def fmt_num(value, fmt=None) -> str:
     return f"{value:g}"
 
 
-def resultsstring(value, error) -> str:
-    """IDL ``kubeviz_resultsstring``: 'value +/- err' with the -999/-998 sentinels."""
+def resultsstring(value, error, symmetric: bool = False) -> str:
+    """IDL ``kubeviz_resultsstring``: 'value +/- err' with the -999/-998 sentinels.
+
+    With ``symmetric`` (noise-cube errors, where the two sides are equal) the pair is
+    shown as ``value ± err``; Monte Carlo / bootstrap errors keep the ``+up/-down`` form.
+    """
     err = np.atleast_1d(np.asarray(error, dtype=float))
     f1, f2 = "9.2f", "8.2f"
     if value > 1e6:
@@ -198,9 +202,9 @@ def resultsstring(value, error) -> str:
     if err[0] == -999:
         return "Not Fit"
     if err[0] == -998:
-        return f"{format(value, f1).strip()} +/- No Errors"
-    if err.size == 1:
-        return f"{format(value, f1).strip()}+/-{format(err[0], f2).strip()}"
+        return f"{format(value, f1).strip()} ± no errors"
+    if err.size == 1 or (symmetric and err.size == 2):
+        return f"{format(value, f1).strip()} ± {format(abs(err[0]), f2).strip()}"
     if err.size == 2:
         return f"{format(value, f1).strip()}+{format(err[0], f2).strip()}/{format(err[1], f2).strip()}"
     return "BUG: Wrong number of elements in error for results string!"

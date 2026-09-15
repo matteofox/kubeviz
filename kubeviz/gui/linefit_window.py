@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (QButtonGroup, QCheckBox, QFrame, QGridLayout, QHBox
 
 from .. import utils
 from .qtenv import APP_FONT_POINTS
-from ..constants import (CKMS, ERR_METHOD_NAMES, FIT_GAUSS, INSTRRES_EXTPOLY, INSTRRES_TEMPLATE,
+from ..constants import (CKMS, ERR_METHOD_NAMES, ERR_NOISE, FIT_GAUSS, INSTRRES_EXTPOLY, INSTRRES_TEMPLATE,
                          INSTRRES_VARPOLY, MODE_SPAXEL, NOT_FIT)
 
 PANEL_STYLE = """
@@ -66,12 +66,14 @@ def _mono_label(text="", width=None, align_right=True):
     return lbl
 
 
-def _cont_string(value, err):
+def _cont_string(value, err, symmetric: bool = False):
     err = np.asarray(err, dtype=float)
     if err[0] == NOT_FIT:
         return "Not Fit"
     if err[0] == -998:
-        return f"{value:.4f} +/- No Errors"
+        return f"{value:.4f} ± no errors"
+    if symmetric:
+        return f"{value:.4f} ± {abs(err[0]):.4f}"
     return f"{value:.4f}+{err[0]:.4f}/{err[1]:.4f}"
 
 
@@ -595,14 +597,15 @@ class LinefitPanels:
             n, b, c, m = rs.n[idx], rs.b[idx], rs.c[idx], rs.m[idx]
             nerr, berr, cerr, merr = rs.nerr[idx], rs.berr[idx], rs.cerr[idx], rs.merr[idx]
             gauss = st.linefit_type == FIT_GAUSS
+            sym = st.domontecarlo == ERR_NOISE          # noise-cube errors are symmetric
             if gauss:
                 lt = st.par_imagebutton[:1]
                 flag = {"B": b[0], "C": c[0]}.get(lt, n[0])
                 for par in range(1, 3 + st.Nlines):
-                    self.w[("N", par)]["best"].setText(utils.resultsstring(n[par], nerr[par, :2]))
-                    self.w[("B", par)]["best"].setText(utils.resultsstring(b[par], berr[par, :2]))
+                    self.w[("N", par)]["best"].setText(utils.resultsstring(n[par], nerr[par, :2], sym))
+                    self.w[("B", par)]["best"].setText(utils.resultsstring(b[par], berr[par, :2], sym))
                     if par >= 3:
-                        self.w[("C", par)]["best"].setText(_cont_string(c[par - 2], cerr[par - 2, :2]))
+                        self.w[("C", par)]["best"].setText(_cont_string(c[par - 2], cerr[par - 2, :2], sym))
                 self.lbl_chisq.setText(f"{rs.chisq[idx]:.4f}")
             else:
                 flag = 0
@@ -610,14 +613,14 @@ class LinefitPanels:
                     mi = st.mainline_index()
                     flag = m[6 * mi + 5]
                     for par in (1, 2):
-                        self.w[("N", par)]["best"].setText(utils.resultsstring(m[6 * mi + par], merr[6 * mi + par, :2]))
+                        self.w[("N", par)]["best"].setText(utils.resultsstring(m[6 * mi + par], merr[6 * mi + par, :2], sym))
                         self.w[("B", par)]["best"].setText("")
                     for iline in range(st.Nlines):
                         rp, par = 6 * iline, iline + 3
-                        self.w[("N", par)]["best"].setText(utils.resultsstring(m[rp], merr[rp, :2]))
-                        self.w[("B", par)]["lamb"].setText(utils.resultsstring(m[rp + 1], merr[rp + 1, :2]))
-                        self.w[("B", par)]["best"].setText(utils.resultsstring(m[rp + 2], merr[rp + 2, :2]))
-                        self.w[("C", par)]["best"].setText(_cont_string(c[iline + 1], cerr[iline + 1, :2]))
+                        self.w[("N", par)]["best"].setText(utils.resultsstring(m[rp], merr[rp, :2], sym))
+                        self.w[("B", par)]["lamb"].setText(utils.resultsstring(m[rp + 1], merr[rp + 1, :2], sym))
+                        self.w[("B", par)]["best"].setText(utils.resultsstring(m[rp + 2], merr[rp + 2, :2], sym))
+                        self.w[("C", par)]["best"].setText(_cont_string(c[iline + 1], cerr[iline + 1, :2], sym))
                 self.lbl_chisq.setText("--")
             for iline in range(st.Nlines):
                 par = iline + 3
