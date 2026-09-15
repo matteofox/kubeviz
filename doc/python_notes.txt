@@ -35,8 +35,8 @@ the rows of the second component appear with the "2nd component rows" switch,
 automatically when a second component is fitted), the Fit setup group (ranges, continuum,
 flags, 2nd component, instrumental resolution, workers), which folds away, the Status rows, and the grid of action buttons (current
 spaxel/mask on the top row, all spaxels/masks below). Docks can be dragged to
-other positions, floated or closed (reopen with Options -> Show linefit window /
-Toggle Zoom); every start uses the default layout, sized to about 92 % of the
+other positions, floated or closed (reopen with Options -> Show line fitting panel /
+Show spectral zoom panel); every start uses the default layout, sized to about 92 % of the
 screen (the fitting unit and fit type are toggled with the SPAXEL / GAUSS buttons in
 the Fit results header; on displays below 900 px the Fit setup group starts folded). Spectra are drawn as
 steps (edges half way between wavelengths), fits as lines.

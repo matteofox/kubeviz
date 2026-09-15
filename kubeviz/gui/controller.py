@@ -241,11 +241,8 @@ class KubevizGUI(QMainWindow):
         self._add_menu(mb, "Errors", [("Use Noise-cube", "NoiseErrors"), ("Use Bootstraps", "BootstrapErrors"), ("Use Monte Carlo 1", "Mc1Errors"),
                                       ("Use Monte Carlo 2", "Mc2Errors"), ("Use Monte Carlo 3", "Mc3Errors")], self.err_group)
         self._add_menu(mb, "Options", [("Smooth parameters...", "SmoothPars"), ("FITALL range...", "FitallRange"),
-                                       ("Use Montecarlo Noise (on/off)", "MonteCarloNoise"), ("Save Montecarlo Plots (on/off)", "MonteCarloPlot"),
-                                       ("Save Montecarlo PDFs (on/off)", "MonteCarloSave"), ("Scale Noisecube error (on/off)", "NoiseCubeErrScale"),
-                                       ("Load Results File...", "LoadResultFile"), None, ("Show linefit window", "ShowLinefit")])
-        for code in ("MonteCarloNoise", "MonteCarloPlot", "MonteCarloSave", "NoiseCubeErrScale"):
-            self.actions[code].setCheckable(True)
+                                       ("Load Results File...", "LoadResultFile"), None,
+                                       ("Show line fitting panel", "ShowLinefit"), ("Show spectral zoom panel", "ToggleZoom")])
         self._add_menu(mb, "Help", [("What's new", "HelpWhatIsNew"), ("Instructions", "HelpInstructions"),
                                     ("Keyboard shortcuts", "HelpShortcuts"), ("Python port notes", "HelpPython")])
         self._sync_menu_checks()
@@ -255,10 +252,8 @@ class KubevizGUI(QMainWindow):
         err = {0: "NoiseErrors", 1: "BootstrapErrors", 2: "Mc1Errors", 3: "Mc2Errors", 4: "Mc3Errors"}.get(st.domontecarlo)
         if err in self.actions:
             self.actions[err].setChecked(True)
-        self.actions["MonteCarloNoise"].setChecked(bool(st.useMonteCarlonoise))
-        self.actions["MonteCarloPlot"].setChecked(bool(st.plotMonteCarlodistrib))
-        self.actions["MonteCarloSave"].setChecked(bool(st.saveMonteCarlodistrib))
-        self.actions["NoiseCubeErrScale"].setChecked(bool(st.scaleNoiseerrors))
+        if getattr(self, "linefit", None) is not None:
+            self.linefit.sync_switches()
         self.spax.sync_controls(st.cubesel, st.imgmode, st.zcuts, st.ctab, st.invert == 1, st.cursormode)
 
     def _connect(self):
@@ -1085,6 +1080,10 @@ class KubevizGUI(QMainWindow):
                     self.replace_state(new)
                 except Exception as exc:
                     QMessageBox.critical(self, "kubeviz", f"Could not load session:\n{exc}")
+            return
+        if code == "ToggleZoom":
+            self.zoom_dock.setVisible(True)
+            self.zoom_dock.raise_()
             return
         if code == "ShowLinefit":
             self.show_table()

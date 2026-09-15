@@ -468,6 +468,25 @@ class LinefitPanels:
         r.addStretch(1)
         g.addLayout(r, 5, 0, 1, 4)
 
+        # error options (formerly in the Options menu)
+        r = QHBoxLayout()
+        r.setSpacing(12)
+        r.addWidget(QLabel("Errors:"))
+        self.cb_mcnoise = QCheckBox("Monte Carlo noise cube")
+        self.cb_mcnoise.setToolTip("Use the noise cube derived from the Monte Carlo realisations instead of the input one")
+        self.cb_scaleerr = QCheckBox("Scale noise-cube errors by √(χ²/dof)")
+        self.cb_scaleerr.setToolTip("Rescale the formal noise-cube errors when the reduced χ² of the fit is not 1")
+        self.cb_mcplot = QCheckBox("Save MC plots")
+        self.cb_mcplot.setToolTip("Write a PNG of the Monte Carlo parameter distributions for every fit")
+        self.cb_mcpdf = QCheckBox("Save MC PDFs")
+        self.cb_mcpdf.setToolTip("Write the Monte Carlo parameter distributions as a table for every fit")
+        for cb, code in ((self.cb_mcnoise, "MonteCarloNoise"), (self.cb_scaleerr, "NoiseCubeErrScale"),
+                         (self.cb_mcplot, "MonteCarloPlot"), (self.cb_mcpdf, "MonteCarloSave")):
+            cb.clicked.connect(lambda _=False, c=code: self.ctl.menu_action(c))
+            r.addWidget(cb)
+        r.addStretch(1)
+        g.addLayout(r, 6, 0, 1, 4)
+
         # workers
         r = QHBoxLayout()
         r.setSpacing(4)
@@ -481,7 +500,7 @@ class LinefitPanels:
         self.lbl_cores.setStyleSheet("color: #6b6b6b")
         r.addWidget(self.lbl_cores)
         r.addStretch(1)
-        g.addLayout(r, 6, 0, 1, 4)
+        g.addLayout(r, 7, 0, 1, 4)
         self.setup_group = Collapsible("Fit setup", setup, expanded=True)
         lay.addWidget(self.setup_group)
 
@@ -580,7 +599,7 @@ class LinefitPanels:
         return panel
 
     def show_results(self):
-        """Expand the Fit results group (Options -> Show linefit window)."""
+        """Expand the Fit results group (Options -> Show line fitting panel)."""
         self.results_group.btn.setChecked(True)
 
     # ================================================================== events
@@ -695,11 +714,9 @@ class LinefitPanels:
             for e in self.edit_coeff:
                 e.setEnabled(poly)
             self.lbl_errmethod.setText(ERR_METHOD_NAMES.get(st.domontecarlo, ""))
-            onoff = lambda v: "on" if v else "off"  # noqa: E731
             inmap = st.gauss_initmap is not None if gauss else st.mom_windowmap is not None
-            self.lbl_mc.setText(f"MC plots {onoff(st.plotMonteCarlodistrib)} · MC PDFs {onoff(st.saveMonteCarlodistrib)} · "
-                                f"MC noise {onoff(st.useMonteCarlonoise)} · scale errors {onoff(st.scaleNoiseerrors)} · "
-                                f"start-value maps {onoff(inmap)}")
+            self.lbl_mc.setText("Start values from the loaded maps" if inmap else "")
+            self.sync_switches()
             self.edit_maxwoffb.setText(f"{st.maxwoffb:.2f}")
             self.edit_maxwoffr.setText(f"{st.maxwoffr:.2f}")
             self.edit_momthresh.setText(f"{st.mom_thresh:.2f}")
@@ -755,6 +772,19 @@ class LinefitPanels:
                     self.cb_second.setChecked(True)
         finally:
             self._building = False
+
+    def sync_switches(self) -> None:
+        """Check boxes of the error options follow the state (also after menu / keyboard changes)."""
+        st = self.state
+        was = self._building
+        self._building = True
+        try:
+            self.cb_mcnoise.setChecked(bool(st.useMonteCarlonoise))
+            self.cb_scaleerr.setChecked(bool(st.scaleNoiseerrors))
+            self.cb_mcplot.setChecked(bool(st.plotMonteCarlodistrib))
+            self.cb_mcpdf.setChecked(bool(st.saveMonteCarlodistrib))
+        finally:
+            self._building = was
 
     def set_busy(self, busy: bool) -> None:
         """Grey out everything that would start another fit or change the setup while a
