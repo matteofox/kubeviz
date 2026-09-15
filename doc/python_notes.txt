@@ -32,8 +32,8 @@ position in the original cube appears only for a trimmed cube). All text is 12 p
 The other panels are dock widgets in the right column: Spectrum, Spectral zoom
 and Line fitting. The last one holds the Fit results table (one row per line;
 the rows of the second component appear with the "2nd component rows" switch,
-automatically when a second component is fitted), the Fit setup, Options and
-Status groups, which fold away, and the grid of action buttons (current
+automatically when a second component is fitted), the Fit setup group (ranges, continuum,
+flags, 2nd component, instrumental resolution, workers), which folds away, the Status rows, and the grid of action buttons (current
 spaxel/mask on the top row, all spaxels/masks below). Docks can be dragged to
 other positions, floated or closed (reopen with Options -> Show linefit window /
 Toggle Zoom); every start uses the default layout, sized to about 92 % of the
@@ -44,7 +44,7 @@ The status bar shows the last message. During FIT ALL / FIT ADJ ALL the
 Status row of the Line fitting panel shows a progress bar and an Interrupt
 button, and the crosshair follows the spaxels being fitted. Both loops can use forked
 worker processes: --nproc N at start (default 1 = sequential) or "Worker processes"
-in the fit Options. FIT ALL gives exactly the sequential results; in FIT ADJ ALL the
+in Fit setup. FIT ALL gives exactly the sequential results; in FIT ADJ ALL the
 spaxels of one pass start from the neighbour solutions at the beginning of the pass
 (1 worker reproduces the IDL order).
 

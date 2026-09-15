@@ -41,7 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--debug", action="store_true", help="increase verbosity")
     p.add_argument("--nproc", type=int, default=1,
                    help="worker processes for FIT ALL / FIT ADJ ALL (default 1 = sequential; 0 = all cores but one, "
-                        "at most 8); can be changed in the fit Options")
+                        "at most 8); can be changed in the Fit setup group")
     p.add_argument("--mask-sn-thresh", type=float, dest="mask_sn_thresh", help="S/N threshold for autoflag (default 3)")
     p.add_argument("--mask-maxvelerr", type=float, dest="mask_maxvelerr", help="max velocity error for autoflag (default 50 km/s)")
     p.add_argument("--mom-thresh", type=float, dest="mom_thresh", help="flux threshold for moments (default 0.5)")

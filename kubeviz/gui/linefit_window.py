@@ -4,8 +4,8 @@
 * ``table``    - the parameter table: one row per line (1st component, with the
   continuum columns appended) plus optional 2nd-component rows and the two
   kinematic rows; it sits in the "Fit results" group at the top of ``controls``;
-* ``controls`` - the panel: Fit results, Fit setup, Options and Status groups
-  (each can be folded) and the grid of action buttons, always visible.
+* ``controls`` - the panel: Fit results and Fit setup groups (each can be folded),
+  the Status rows and the grid of action buttons, always visible.
 
 All user actions go to ``controller.linefit_action(code, value)`` with the IDL uvalue
 codes (``'FIT'``, ``'SPN3'``, ``'MINPB1'``, ``'FIXN2'``, ``'IMAGEC4'`` ...).
@@ -338,42 +338,18 @@ class LinefitPanels:
         self.results_group = Collapsible("Fit results", self.table, expanded=True)
         lay.addWidget(self.results_group, stretch=1)
 
-        # ---- Fit setup
+        # ---- Fit setup (fit ranges, continuum, flags, components, instrumental resolution, workers)
         setup = QWidget()
         g = QGridLayout(setup)
         g.setContentsMargins(6, 2, 6, 2)
         g.setHorizontalSpacing(8)
-        g.setVerticalSpacing(2)
+        g.setVerticalSpacing(3)
         self.edit_maxwoffb, self.edit_maxwoffr = _edit(62), _edit(62)
         self.edit_cminoff, self.edit_cmaxoff = _edit(62), _edit(62)
         self.edit_cminperc, self.edit_cmaxperc = _edit(52), _edit(52)
         self.edit_corder = _edit(34)
         self.edit_snthresh = _edit(62)
         self.edit_maxvelerr = _edit(62)
-        self.cb_contmode = QCheckBox("Fit continuum with the lines (MPFIT CONT)")
-        self.cb_contmode.setToolTip("Off: continuum from side bands, subtracted before the fit. "
-                                    "On: a constant fitted together with the lines")
-        self.cb_contmode.clicked.connect(lambda: self.ctl.linefit_action("CONTMODE"))
-        rows = [("Fit range blue / red (Å)", [self.edit_maxwoffb, self.edit_maxwoffr],
-                 "Wavelength range around each lineset used in the fit"),
-                ("Continuum bands offset min / max (Å)", [self.edit_cminoff, self.edit_cmaxoff],
-                 "Distance from the lineset centre of the two side bands used for the continuum"),
-                ("Continuum percentiles, order", [self.edit_cminperc, self.edit_cmaxperc, self.edit_corder],
-                 "Percentile window of the side-band pixels and polynomial order of the continuum"),
-                ("Autoflag S/N, max σ error (km/s)", [self.edit_snthresh, self.edit_maxvelerr],
-                 "AUTO FLAG thresholds: minimum S/N and maximum velocity / dispersion error")]
-        for r, (text, edits, tip) in enumerate(rows):
-            lbl = QLabel(text)
-            lbl.setToolTip(tip)
-            g.addWidget(lbl, r, 0)
-            rr = QHBoxLayout()
-            rr.setSpacing(4)
-            for e in edits:
-                rr.addWidget(e)
-            rr.addStretch(1)
-            g.addLayout(rr, r, 1)
-        g.addWidget(self.cb_contmode, len(rows), 0, 1, 2)
-        g.setColumnStretch(1, 1)
         for e, code in ((self.edit_maxwoffb, "LINEFITMAXOFFB"), (self.edit_maxwoffr, "LINEFITMAXOFFR"),
                         (self.edit_cminoff, "CONTMINOFF"), (self.edit_cmaxoff, "CONTMAXOFF"),
                         (self.edit_cminperc, "CONTMINPERC"), (self.edit_cmaxperc, "CONTMAXPERC"),
@@ -381,97 +357,133 @@ class LinefitPanels:
                         (self.edit_maxvelerr, "MASKMAXVELERR")):
             e.setPlaceholderText("")
             e.editingFinished.connect(lambda c=code, ee=e: self._text(c, ee))
-        self.setup_group = Collapsible("Fit setup", setup, expanded=True)
-        lay.addWidget(self.setup_group)
 
-        # ---- Options
-        opts = QWidget()
-        g = QGridLayout(opts)
-        g.setContentsMargins(6, 2, 6, 2)
-        g.setVerticalSpacing(2)
-        r1 = QHBoxLayout()
+        def cell(text, widgets, tip, row, col):
+            lbl = QLabel(text)
+            lbl.setToolTip(tip)
+            g.addWidget(lbl, row, col)
+            rr = QHBoxLayout()
+            rr.setSpacing(4)
+            for w in widgets:
+                rr.addWidget(w)
+            rr.addStretch(1)
+            g.addLayout(rr, row, col + 1)
+        # two numeric settings per row: labels in columns 0 / 2, fields in 1 / 3
+        cell("Fit range blue / red (Å)", [self.edit_maxwoffb, self.edit_maxwoffr],
+             "Wavelength range around each lineset used in the fit", 0, 0)
+        cell("Continuum bands offset min / max (Å)", [self.edit_cminoff, self.edit_cmaxoff],
+             "Distance from the lineset centre of the two side bands used for the continuum", 0, 2)
+        cell("Continuum percentiles, order", [self.edit_cminperc, self.edit_cmaxperc, self.edit_corder],
+             "Percentile window of the side-band pixels and polynomial order of the continuum", 1, 0)
+        cell("Autoflag S/N, max σ error (km/s)", [self.edit_snthresh, self.edit_maxvelerr],
+             "AUTO FLAG thresholds: minimum S/N and maximum velocity / dispersion error", 1, 2)
+        g.setColumnStretch(1, 1)
+        g.setColumnStretch(3, 1)
+
+        # switches
+        r = QHBoxLayout()
+        r.setSpacing(12)
         self.cb_constr = QCheckBox("Fit with constraints")
         self.cb_constr.setToolTip("Use the user start values and min/max limits of the table")
         self.cb_constr.clicked.connect(lambda: self.ctl.linefit_action("FITCONSTRAINTS"))
-        r1.addWidget(self.cb_constr)
+        r.addWidget(self.cb_constr)
         self.lbl_momthresh = QLabel("Moments threshold")
         self.edit_momthresh = _edit(62)
         self.edit_momthresh.setPlaceholderText("")
         self.edit_momthresh.editingFinished.connect(lambda: self._text("MOMTHRESH", self.edit_momthresh))
-        r1.addWidget(self.lbl_momthresh)
-        r1.addWidget(self.edit_momthresh)
+        r.addWidget(self.lbl_momthresh)
+        r.addWidget(self.edit_momthresh)
         self.cb_fixratios = QCheckBox("Fix line ratios ([NII], [OIII], [OI])")
+        self.cb_fixratios.setToolTip("Tie the doublet fluxes to their theoretical ratios")
         self.cb_fixratios.clicked.connect(lambda: self.ctl.linefit_action("FIXRATIOS"))
-        r1.addWidget(self.cb_fixratios)
-        r1.addStretch(1)
-        g.addLayout(r1, 0, 0)
-        r1 = QHBoxLayout()
+        r.addWidget(self.cb_fixratios)
+        self.cb_contmode = QCheckBox("Fit continuum with the lines")
+        self.cb_contmode.setToolTip("Off: continuum from the side bands, subtracted before the fit (SDSS method). "
+                                    "On: a constant fitted together with the lines (IDL 'MPFIT CONT')")
+        self.cb_contmode.clicked.connect(lambda: self.ctl.linefit_action("CONTMODE"))
+        r.addWidget(self.cb_contmode)
+        r.addStretch(1)
+        g.addLayout(r, 2, 0, 1, 4)
+
+        # second component
+        r = QHBoxLayout()
+        r.setSpacing(8)
         self.lbl_second = QLabel("2nd component:")
-        r1.addWidget(self.lbl_second)
+        r.addWidget(self.lbl_second)
         self.rb_second = [QRadioButton("fainter"), QRadioButton("larger offset"), QRadioButton("larger width")]
         self.second_group = QButtonGroup()
-        for i, (rb, code) in enumerate(zip(self.rb_second, ("FREE_2ND", "HIVEL_2ND", "BROAD_2ND"))):
+        for i, (rb, code, tip) in enumerate(zip(self.rb_second, ("FREE_2ND", "HIVEL_2ND", "BROAD_2ND"),
+                                                ("The 2nd component is the fainter one",
+                                                 "The 2nd component has the larger velocity offset",
+                                                 "The 2nd component has the larger width (broad)"))):
+            rb.setToolTip(tip)
             self.second_group.addButton(rb, i)
             rb.clicked.connect(lambda _=False, c=code: self.ctl.linefit_action(c))
-            r1.addWidget(rb)
+            r.addWidget(rb)
         self.cb_smart = QCheckBox("smart")
         self.cb_smart.setToolTip("Keep the 2nd component only when two kinematic components are really present")
         self.cb_smart.clicked.connect(lambda: self.ctl.linefit_action("SMART_2ND"))
-        r1.addWidget(self.cb_smart)
-        r1.addStretch(1)
-        g.addLayout(r1, 1, 0)
-        r2 = QHBoxLayout()
-        r2.setSpacing(4)
-        r2.addWidget(QLabel("Instr. resolution:"))
+        r.addWidget(self.cb_smart)
+        r.addStretch(1)
+        g.addLayout(r, 3, 0, 1, 4)
+
+        # instrumental resolution
+        r = QHBoxLayout()
+        r.setSpacing(4)
+        r.addWidget(QLabel("Instr. resolution:"))
         b = QPushButton("Fit sky lines")
         b.setToolTip("Fit the sky lines in the variance cube")
         b.clicked.connect(lambda: self.ctl.linefit_action("FITSKY"))
-        r2.addWidget(b)
+        r.addWidget(b)
         self.btn_poly = QPushButton("Use polynomial")
         self.btn_poly.setToolTip("Polynomial from the header / archive / instrument manual")
         self.btn_poly.clicked.connect(lambda: self.ctl.linefit_action("POLYSKY"))
-        r2.addWidget(self.btn_poly)
+        r.addWidget(self.btn_poly)
         self.btn_tpl = QPushButton("Use templates")
+        self.btn_tpl.setToolTip("Resolution measured on the spectral templates")
         self.btn_tpl.clicked.connect(lambda: self.ctl.linefit_action("TPLSKY"))
-        r2.addWidget(self.btn_tpl)
-        r2.addStretch(1)
-        g.addLayout(r2, 2, 0)
-        r2b = QHBoxLayout()
-        r2b.setSpacing(4)
-        r2b.addWidget(QLabel("R at the main line:"))
-        self.lbl_instrres = _mono_label("", 60, align_right=False)
-        r2b.addWidget(self.lbl_instrres)
+        r.addWidget(self.btn_tpl)
+        r.addSpacing(10)
+        self.lbl_instrres = QLabel("")
+        self.lbl_instrres.setTextFormat(Qt.TextFormat.RichText)
+        self.lbl_instrres.setToolTip("Resolving power at the observed wavelength of the main line")
+        r.addWidget(self.lbl_instrres)
         self.lbl_instrres_mode = QLabel("")
         self.lbl_instrres_mode.setStyleSheet("color: #6b6b6b")
-        r2b.addWidget(self.lbl_instrres_mode)
-        r2b.addStretch(1)
-        g.addLayout(r2b, 3, 0)
-        r3 = QHBoxLayout()
-        r3.setSpacing(4)
-        r3.addWidget(QLabel("Polynomial coefficients:"))
+        r.addWidget(self.lbl_instrres_mode)
+        r.addStretch(1)
+        g.addLayout(r, 4, 0, 1, 4)
+        r = QHBoxLayout()
+        r.setSpacing(4)
+        self.lbl_coeff = QLabel("Polynomial coefficients:")
+        r.addWidget(self.lbl_coeff)
         self.edit_coeff = []
         for i in range(st.max_polycoeff_instrres + 1):
             e = _edit(80)
             e.setPlaceholderText("")
+            e.setToolTip(f"Coefficient of λ^{i}")
             e.editingFinished.connect(lambda i=i, ee=e: self._text(f"POLYCOEFFPAR{i}", ee))
             self.edit_coeff.append(e)
-            r3.addWidget(e)
-        r3.addStretch(1)
-        g.addLayout(r3, 4, 0)
-        r4 = QHBoxLayout()
-        r4.setSpacing(4)
-        r4.addWidget(QLabel("Worker processes for FIT ALL / FIT ADJ ALL:"))
+            r.addWidget(e)
+        r.addStretch(1)
+        g.addLayout(r, 5, 0, 1, 4)
+
+        # workers
+        r = QHBoxLayout()
+        r.setSpacing(4)
+        r.addWidget(QLabel("Worker processes for FIT ALL / FIT ADJ ALL:"))
         self.spin_nproc = QSpinBox()
         self.spin_nproc.setRange(1, max(1, os.cpu_count() or 1))
         self.spin_nproc.setToolTip("Forked worker processes; 1 = sequential (IDL order). FIT ALL results do not depend on it")
         self.spin_nproc.valueChanged.connect(lambda v: self._text("NPROC", None, v))
-        r4.addWidget(self.spin_nproc)
+        r.addWidget(self.spin_nproc)
         self.lbl_cores = QLabel(f"({os.cpu_count() or 1} cores)")
         self.lbl_cores.setStyleSheet("color: #6b6b6b")
-        r4.addWidget(self.lbl_cores)
-        r4.addStretch(1)
-        g.addLayout(r4, 5, 0)
-        lay.addWidget(Collapsible("Options", opts, expanded=False))
+        r.addWidget(self.lbl_cores)
+        r.addStretch(1)
+        g.addLayout(r, 6, 0, 1, 4)
+        self.setup_group = Collapsible("Fit setup", setup, expanded=True)
+        lay.addWidget(self.setup_group)
 
         # ---- Status
         status = QWidget()
@@ -675,8 +687,13 @@ class LinefitPanels:
 
             self.edit_z.setText(f"{st.redshift:.6f}")
             R = float(st.getinstrres()) if st.Nlines > 0 else 0.0
-            self.lbl_instrres.setText(f"{R:.1f}")
+            lam = float(st.mainline()) if st.Nlines > 0 else 0.0
+            self.lbl_instrres.setText(f"<i>R</i>(<i>λ</i>&nbsp;=&nbsp;{lam:.1f}&nbsp;Å) = <b>{R:.0f}</b>")
             self.lbl_instrres_mode.setText(INSTRRES_MODE_TEXT.get(st.instrres_mode, ""))
+            poly = st.instrres_mode in (INSTRRES_VARPOLY, INSTRRES_EXTPOLY)
+            self.lbl_coeff.setEnabled(poly)
+            for e in self.edit_coeff:
+                e.setEnabled(poly)
             self.lbl_errmethod.setText(ERR_METHOD_NAMES.get(st.domontecarlo, ""))
             onoff = lambda v: "on" if v else "off"  # noqa: E731
             inmap = st.gauss_initmap is not None if gauss else st.mom_windowmap is not None

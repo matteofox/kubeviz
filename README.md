@@ -48,7 +48,7 @@ shortcuts are those of the IDL version (Help -> Keyboard shortcuts).
 
 Every keyword of the IDL procedure is available as a command line flag (`kubeviz --help`).
 FIT ALL and FIT ADJ ALL can use forked worker processes: `--nproc N` (default 1 = sequential;
-0 = all cores but one, at most 8), also adjustable in the fit Options.
+0 = all cores but one, at most 8), also adjustable in the Fit setup group.
 `kubeviz --demo` generates a synthetic cube and opens it. `kubeviz-compare a_res.fits b_res.fits`
 compares two results files plane by plane (for the IDL vs Python parity check). IDL `.sav`
 sessions can be opened directly (best effort). See `doc/python_notes.txt` (also under Help ->
