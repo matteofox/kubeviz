@@ -1,0 +1,228 @@
+V3.0 2026
+
+kubeviz in Python (numpy, scipy, astropy; PyQt6 and pyqtgraph for the GUI).
+Same fitting engine, results files, sessions and keyboard shortcuts as the IDL
+version 2.2; the interface is new:
+* one window with a spaxel viewer (toolbar, interactive colour bar, continuous
+  zoom and pan), a spectrum panel and a line fitting panel with the results
+  table, the fit setup and the action buttons
+* fits overplotted on the spectrum; spectra drawn as steps
+* unfit spaxels blank in the result maps; exact histogram equalisation
+* FIT ALL and FIT ADJ ALL on parallel worker processes, with progress bar and
+  Interrupt
+* results shown as value +/- error for symmetric (noise cube) errors
+* command line flags for every option, --batch mode, --demo synthetic cube,
+  kubeviz-compare to compare two results files
+* IDL .sav sessions can be opened read-only; nothing is saved on quit
+
+Earlier versions (IDL):
+
+
+V1.0 10-02-2014   
+
+First release
+
+V1.1 28-02-2014   
+
+New features:	  
+* Batch mode functionality to allow kubeviz to work automatically. Requires 
+  the redshift keyword to be set. Works in combination with /fit_all_lines  
+  to specify whether to fit only the mainline or the narrow components of   
+  all lines in the selected lineset. 
+* Load session from the command line. If the first keyword has extension     
+  ".sav" it is assumed to be a kubeviz saved session. 
+* Load a result file into a new session. If the resfile keyword is set, a   
+  result file is loaded into a new session. 
+* Add MonteCarlo 3 method for error estimate. Works with the smoothed 
+  datacube but the amplitude of random noise added to the spectra is 
+  obtained from then residuals from a first fit instead of from  the noise 
+  cube. The residuals are also randomly shifted along the wavelength axis.  
+* Add display header option in the File drop-down menu.  
+* Add Optimal Mask option in the Spaxel Mask drop-down menu. The mask is 
+  drawn from spaxels with S/N > 5 in the currently displayed image.
+* Add the FIT ADJ button to fit bad spaxels using initial guess from adjacent
+  spaxels with OK flag. Automatically iterates until no more success. 
+* In the Help menu an (incomplete) instruction document is now available.
+* Weighted Avg and Weighted Med options available in the image mode menu.
+* Optimal option available in the spectrum mode menu.
+
+Improvements and bug fixes:
+* Fixed a bug that produced an unallocated variable error when attempting 
+  to fit a line without continuum using one of the montecarlo error methods.
+* Improved memory allocation. The program now uses less memory when the 
+  montecarlo error methods are called. A better garbage collector makes 
+  sure that all pointers are destroyed upon the Quit call. 
+* The fitting range is now defined w.r.t. the bisector of the two central 
+  lines for linesets having an even number of lines. 
+* Improved stability when fitting linesets other than 1. 
+* Changing the redshift no longer makes the linefit window freeze. The 
+  buttons status was not correctly propagated.
+* The header of the results file carries more details on the parameters that
+  were set in the kubeviz session. Results from versions before V1.1 cannot 
+  be loaded using the resfile keyword. 
+* The wavelength solution keywords are now written in the header when a 1D
+  spectrum is saved.  
+* The height of the linefit window is automatically adjusted according to 
+  the number of lines to be fit. The width has been reduced for better 
+  rendering on low-resolution displays. 
+* The Sum, Median, etc. images are now updated every time the wavelength
+  range is changed.
+* The bad-spaxels are shown in white in the spaxel viewer (as in Ds9) and 
+  their values are correctly printed as NaN. 
+* The first and the last 100 lambda pixels are not taken into account when 
+  computing the y-range for the spectrum viewer. 
+
+V1.2 26-03-2014   
+
+New features:
+* Moments can be now computed. The integrated flux, first and second moments
+  are shown in the graphical window. Higher order moments (skewness and kurtosis)
+  are stored and output only in the results FITS file.
+* When a montecarlo error method is called, the noise cube is correctly computed 
+  from the montecarlo cubes. This feature can be switched on/off in the option 
+  menu. The default is off.
+
+Improvements and bug fixes:
+* Redesigned linefit window, now also allows the autoflag parameters to be 
+  altered, as well as the flux threshold for the moments.
+* The smooth parameters can be interactively changed using the dedicated 
+  dialog window selected in the options menu.  
+* The IDL path is searched for all the necessary routines before kubeviz 
+  can start.
+* The environmental variable KUBEVIZ_DEFAULT is not required if all the add-on
+  files are in the same directory of the main kubeviz.pro file.  
+* The dir keyword has been removed. The datacube path can be specified with the
+  file name. The bootstrap cubes are searched in the same path if no explicit
+  path is given. The results file is searched in the current working directory
+  if the path is not given. The path can either be relative to the working dir 
+  or absolute.
+* The image saved with the Print command is rebinned to higher resolution.     
+* Now works also if the WCS keywords are missing in the header.
+* The widget IDs are no longer stored in the saved session.
+* Various performance and memory usage improvements.	
+
+V1.3 31-10-2014   
+
+New features:
+* Line ratios for OI, OII and NII lines can be fixed ion the fit via the
+  linefit window dedicated button.
+* The instrumental resolution routines have been rewritten from the ground-up 
+  and the code is now instrument sensitive. For all the instruments the resultion 
+  can be computed from the noisecube lines.
+  For KMOS the polynomial fit coefficients are searched in the datafile header or
+  sourced from general resolution curves stored in the kubeviz release.
+* The trim keyword can be set to read only a portion of the datacube. See the 
+  instructions for the details of the syntax. Useful when dealing with large cubes. 
+
+Improvements and bug fixes:
+* Redesigned directory structure for the code. Now includes subdirectories for
+  the templates, additional routines used and the documentation.
+* The fname keyword is now called with datafile and is mandatory. If the 
+  file is a saved session the session is restored. If the noisecube is saved
+  in a separate file it can be input using the noisefile keyword or can be 
+  interactively selected via a pop-up window.
+* For cryogenic instruments working in vacuum (currently KMOS and SINFONI) the
+  lines database is converted to vacuum wavelengths.
+* Redesigned info section in the spaxel viewer, now includes the Image and Physical
+  coordinates (like in ds9) to avoid confusion when the trim keyword is set.
+* The zcut menu now includes more options including a pop-up window where the 
+  spaxel values distribution is plotted and that allows interactive adjustment of the
+  user min and max color cuts. The spaxel user limits are now independent from the 
+  spectral scale limits. 
+* Several improvements to make the code efficient on large IFU (like SINFONI) and
+  reduce the memory usage. In case of long procedures, a progress line is printed
+  on the terminal as well with an estimate of the residual time to the end.
+* Fixed the 1D spectrum save procedure and a save cube feature is now also available.        
+* The batch mode works on spaxel masks now as well as on spaxels.  
+
+V1.3.1 - 1.3.3
+
+Improvements and bug fixes:
+* Masks are now handeld in 2D instead of 1D internally. This means saved masks 
+  can be used by other programs.
+* Lineset 8 added. It includes Lya.
+* Addon routines are now kubeviz specific (they are called kubeviz_routinename). 
+  This solves conflicts with other routines with the same name in IDL path.
+* If a routine is missing the code prints warnings but continues to work. The user
+  should check if the missing routine is important for kubeviz (Astrolib or Coyote 
+  might be missing).  
+* The code automatically checks if MPFIT version is more recent than 1.70. 
+  Otherwise it stops with an error.  
+
+V1.4 24-11-2015
+
+New features:
+* Save the currently displayed image and associated noise. Useful if you want to
+  save a narrow band image or one single plane of the linefit results structure.
+  
+Improvements and bug fixes:
+* Revised and updated documentation
+* The code now checks extensively (at startup) for the presence of 3-rd party 
+  libraries and if they are up-to-date. Errors are printed otherwise.
+* Revised and improved spectral viewer title bar. Now shows the currently selected 
+  range (1 or 2).
+* Display FITS header now allows the user to select the primary, data or noise header.
+  If the file does not have a primary header this option is not present.  
+
+V1.4.1 16-12-2015 
+
+Improvements and bug fixes:
+* Critical bug fix preventing the results to be saved if lineset=0
+* Improved intial guess on the line position.
+
+V2.0 12-06-2016
+
+This version presents so many new features that we dare calling it V2.0!
+
+New features:
+* Zoom in and out in the spaxel viewer with the zoom button and navigate by clicking 
+  near the edges of the viewer. Particularly useful for large datacubes.
+* Circular and square spaxel masks of a given size can now be conventiently defined
+  using the new pop-up window Mask parameters (in Sp.Masks)
+* Improvements on the handling of a second gaussian component in the fits. The user
+  can define if the second component needs to have a larger sigma or a larger velocity
+  w.r.t. the first component. If the fit is left free the second component will be the 
+  fainter.
+* The range of spaxels for FIT ALL and FITADJ ALL can be specified by the user. Go to 
+  Options --> FITALL range and specify your limits. You can also revert to the default
+  limits (fit the entire cube). 
+* (BETA) User initial guess maps (gaussian) and window parameter maps (moments) can be 
+  loaded. However be aware that this is not fully implemented yet and can only be done
+  from the command line when kubeviz is called. A forthcoming release will allow full
+  interactivity on those maps.
+* Very long fitting runs can be now interrupted at any time thanks to the Interrupt Fit
+  window that automatically appears if you click FITALL or FITADJ ALL.  
+  
+Improvements and bug fixes:
+* NaNs in the datacube are now natively handeld by the code (no need to convert them to
+  zeroes internally). 
+* Significant performance updates for FITALL, bad spaxels are skipped and the overall 
+  runtime has been improved by a factor ~ 2. 
+* Improvements in the initial guess values for lines different from the mainline.
+* The definition of line flux S/N for flagging purposes is set relative to the 
+  NEGATIVE 1-sigma error only. TODO: Should consistently set S/N computed for viewing.
+* Fix problem with spikes in continuum fitting region driving a poor fit: only fit 
+  wavelength channels with spectrum and noise within well controlled rang
+* Fix  a rare bug that unmasked image was not shown when unflagged results cube 
+  is selected, if all spaxels are flagged.
+* Allow cursor and spaxel mask to be displayed simultaneously, and adjust colour 
+  of cursor to accomodate this 
+* Spaxel masks feature extra diagonal line to identify selected spaxels unambiguously.
+* Several minor bug fixes (the instr keyword set from the command line is now honored 
+  by the code)
+    
+V2.1 ??-11-2017
+
+New features:
+* New Smart option for the fitting of second components. This applies only when there are
+  two separate narrow kinematical components (not for narrow+broad coincident lines). If
+  the flag is set the code attempts to automatically decide whether two components are
+  indeed present (following the criteria defined in Consolandi et al. 2017, A&A, 606, 83).
+  If these criteria are not satisfied, only one component is fit and saved. (Use with
+  caution)
+
+Improvements and bug fixes:
+* The iterative fitadjall now uses a completely new iteration scheme that loops over spaxels
+  with the highest number of valid nearby fits and then iterates until no more improvements
+  are possible.
+* Several minor bug fixes  

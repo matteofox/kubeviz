@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (QApplication, QDialog, QDialogButtonBox, QFormLayou
 
 from .. import __version__
 
-DOC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "doc")
+DOC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "help")
 
 
 class SmoothParsDialog(QDialog):
@@ -263,7 +263,7 @@ q           : exit
 
 In spectrum window only:
 
-s           : Set wavelength (in combination with Sel Range button)
+s           : mark a limit of the wavelength range (Range button: which range)
 z           : Reset the redshift assuming the current wavelength
               to be that of the mainline
 
@@ -278,10 +278,6 @@ right drag          : brightness / contrast
 wheel               : zoom in / out around the cursor
 middle drag, shift+left drag : pan
 """
-
-
-def help_python(parent=None) -> TextDialog:
-    return TextDialog("Python port notes", _doc_text("python_notes.txt"), parent)
 
 
 def help_shortcuts(parent=None) -> TextDialog:

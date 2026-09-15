@@ -13,3 +13,7 @@ fit_errmsg_*.txt
 
 # working notes, not part of the repository
 QUESTIONS.md
+
+# local notes, not tracked
+PORTING.md
+CHANGELOG.md

@@ -241,7 +241,7 @@ class KubevizGUI(QMainWindow):
         self._add_menu(mb, "Options", [("Smooth parameters...", "SmoothPars"), ("FITALL range...", "FitallRange"),
                                        ("Load Results File...", "LoadResultFile")])
         self._add_menu(mb, "Help", [("What's new", "HelpWhatIsNew"), ("Instructions", "HelpInstructions"),
-                                    ("Keyboard shortcuts", "HelpShortcuts"), ("Python port notes", "HelpPython")])
+                                    ("Keyboard shortcuts", "HelpShortcuts")])
         self._sync_menu_checks()
 
     def _sync_menu_checks(self):
@@ -1080,7 +1080,7 @@ class KubevizGUI(QMainWindow):
             return
         if code.startswith("Help"):
             {"HelpWhatIsNew": dialogs.help_whatsnew, "HelpInstructions": dialogs.help_instructions,
-             "HelpShortcuts": dialogs.help_shortcuts, "HelpPython": dialogs.help_python}[code](self).show()
+             "HelpShortcuts": dialogs.help_shortcuts}[code](self).show()
             return
 
         cubes = {"Data": CUBE_DATA, "Noise": CUBE_NOISE, "BadPixels": CUBE_BADPIX, "SN": CUBE_SN, "Linefit": CUBE_LINEFIT,

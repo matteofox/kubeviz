@@ -399,7 +399,7 @@ class LinefitPanels:
         r.addWidget(self.cb_fixratios)
         self.cb_contmode = QCheckBox("Fit continuum with the lines")
         self.cb_contmode.setToolTip("Off: continuum from the side bands, subtracted before the fit (SDSS method). "
-                                    "On: a constant fitted together with the lines (IDL 'MPFIT CONT')")
+                                    "On: a constant fitted together with the lines")
         self.cb_contmode.clicked.connect(lambda: self.ctl.linefit_action("CONTMODE"))
         r.addWidget(self.cb_contmode)
         r.addStretch(1)
@@ -493,7 +493,7 @@ class LinefitPanels:
         r.addWidget(QLabel("Worker processes for FIT ALL / FIT ADJ ALL:"))
         self.spin_nproc = QSpinBox()
         self.spin_nproc.setRange(1, max(1, os.cpu_count() or 1))
-        self.spin_nproc.setToolTip("Forked worker processes; 1 = sequential (IDL order). FIT ALL results do not depend on it")
+        self.spin_nproc.setToolTip("Forked worker processes; 1 = sequential. FIT ALL results do not depend on it")
         self.spin_nproc.valueChanged.connect(lambda v: self._text("NPROC", None, v))
         r.addWidget(self.spin_nproc)
         self.lbl_cores = QLabel(f"({os.cpu_count() or 1} cores)")

@@ -4,9 +4,8 @@ Interactive visualisation and emission-line fitting of IFU datacubes.
 
 This repository contains two implementations:
 
-* **`kubeviz/` (Python 3)** - a full port of the IDL program to Python (numpy/scipy/astropy,
-  PyQt6 + pyqtgraph GUI). Engine, batch mode and GUI are ported; see `PORTING.md` for the
-  routine-by-routine status and the list of deliberate differences.
+* **`kubeviz/` (Python 3)** - the current version: numpy / scipy / astropy engine, PyQt6 +
+  pyqtgraph GUI, batch mode. Results files are interchangeable with the IDL version.
 * **`kubeviz.pro` (IDL, V2.2)** - the original program, unchanged, with its `addons/`,
   `templates/` and `doc/` directories. The IDL instructions follow below.
 
@@ -50,17 +49,16 @@ kubeviz session.kvz           # reopen a saved session
 
 Mouse in the spaxel viewer: left click/drag moves the crosshair or paints the mask, right
 drag changes contrast, wheel zooms, middle drag (or shift + left drag) pans. Keyboard
-shortcuts are those of the IDL version (Help -> Keyboard shortcuts).
+shortcuts are listed under Help -> Keyboard shortcuts, the full manual under Help ->
+Instructions.
 
-Every keyword of the IDL procedure is available as a command line flag (`kubeviz --help`).
-FIT ALL and FIT ADJ ALL can use forked worker processes: `--nproc N` (default 1 = sequential;
-0 = all cores but one, at most 8), also adjustable in the Fit setup group.
-`kubeviz --demo` generates a synthetic cube and opens it. `kubeviz-compare a_res.fits b_res.fits`
-compares two results files plane by plane (for the IDL vs Python parity check). IDL `.sav`
-sessions can be opened directly (best effort). See `doc/python_notes.txt` (also under Help ->
-Python port notes) for the differences with the IDL version and `CHANGELOG.md`.
-Results files use the same plane layout and header keywords as the IDL version, so they can be
-exchanged between the two implementations. Python sessions are saved as `.kvz` files.
+Every option is a command line flag (`kubeviz --help`). FIT ALL and FIT ADJ ALL can use
+forked worker processes: `--nproc N` (default 1 = sequential; 0 = all cores but one, at most
+8), also adjustable in the Fit setup group. `kubeviz --demo` generates a synthetic cube and
+opens it. `kubeviz-compare a_res.fits b_res.fits` compares two results files plane by plane.
+Results files use the same plane layout and header keywords as the IDL version, so they can
+be exchanged between the two implementations; IDL `.sav` sessions can be opened read-only.
+Python sessions are saved as `.kvz` files.
 
 From Python:
 

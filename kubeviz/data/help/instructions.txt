@@ -1,0 +1,256 @@
+                              *** INSTRUCTIONS ***
+
+** Purpose **
+
+kubeviz shows a FITS datacube (x, y, wavelength) interactively and fits emission
+lines, spaxel by spaxel or over user-defined spaxel masks, with Gaussian profiles
+or moments. Uncertainties come from the noise cube, from bootstrap cubes or from
+Monte Carlo realisations. Results are written as FITS files that can be inspected
+again later.
+
+** Starting kubeviz **
+
+  kubeviz cube.fits --redshift 0.85 --lineset 1          interactive session
+  kubeviz cube.fits --redshift 0.85 --batch --fit-all-lines   fit every spaxel, no GUI
+  kubeviz session.kvz                                    reopen a saved session
+  kubeviz cube.fits --resfile cube_res.fits              new session with results loaded
+  kubeviz --demo                                         synthetic demo cube
+  kubeviz --help                                         list of all options
+
+Options (all optional):
+
+  --noisefile FILE     separate noise file (then --ext / --noise-ext default to 0 or 1)
+  --ext N              FITS extension of the data cube (default 1)
+  --noise-ext N        FITS extension of the noise cube (default 2)
+  --trim '[x1:x2,y1:y2,z1:z2]'
+                       portion of the cube to load; 1-based inclusive indices as in
+                       IRAF / ds9, * for a whole axis, e.g. '[100:200,*,*]'
+  --fluxfac F          factor applied to the flux scale (default instrument dependent)
+  --smooth N           spatial smoothing kernel in spaxels (default 1)
+  --specsmooth N       spectral smoothing kernel in pixels (default 1)
+  --transpose          transpose the spatial axes
+  --logarithmic        the wavelength solution in the header is logarithmic
+  --vacuum             the wavelength solution is in vacuum (automatic for known instruments)
+  --waveunit UNIT      wavelength unit when CUNIT3 is missing
+  --redshift Z         redshift of the target (default 0); needed for the fits
+  --do-mc-errors N     error method: 0 noise cube (default), 1 bootstrap cubes,
+                       2 Monte Carlo 1, 3 Monte Carlo 2, 4 Monte Carlo 3 (see Errors)
+  --bootstrap FILE     multi-extension FITS file with one realisation of the cube per
+                       extension (NEXT in the primary header)
+  --nmontecarlo N      number of Monte Carlo realisations (default 100)
+  --plot-mc-pdf        save PNG plots of the Monte Carlo parameter distributions
+  --save-mc-pdf        save the Monte Carlo parameter distributions as FITS tables
+  --use-mc-noise       use the noise cube derived from the Monte Carlo cubes
+  --scalenoiseerr      rescale the noise-cube errors by sqrt(chi2/dof)
+  --lineset N          fit one lineset only (default: all lines in the spectral range)
+                       1 Ha+[NII]  2 Hb  3 [OIII]  4 [SII]  5 [OI]  6 [SIII]  7 HeI  8 Lya
+  --fix-ratios         tie the [NII], [OIII] and [OI] doublet ratios (Storey & Zeippen 2000)
+  --fittype gauss|moments
+  --fitpars a,b,c,d,e,f[,g,h]
+                       fit range blue, red (A); continuum bands offset min, max (A);
+                       continuum percentiles min, max; continuum polynomial order;
+                       continuum mode (0 side bands, 1 fitted with the lines)
+  --mask-sn-thresh S   AUTO FLAG: minimum S/N of a line (default 3)
+  --mask-maxvelerr V   AUTO FLAG: maximum velocity / dispersion error, km/s (default 50)
+  --mom-thresh T       moments: threshold above the continuum noise for the 1st and
+                       higher moments (default 0.5)
+  --spmask FILE        spaxel mask file to load
+  --instr NAME         instrument (the INSTRUME header keyword takes precedence)
+  --band NAME          band (instrumental resolution and wavelength range)
+  --resfile FILE       load a results file into the new session
+  --momwindowfile FILE, --gaussinitfile FILE
+                       cubes with per-spaxel start values (moments window / Gaussian parameters)
+  --outdir DIR         where output files are written
+  --logfile FILE       copy of the terminal output
+  --nproc N            worker processes for FIT ALL / FIT ADJ ALL (default 1; 0 = all
+                       cores but one, at most 8); also in the Fit setup group
+  --zoommap            show the separate spectral zoom panel
+  --batch              no GUI: fit all spaxels (or all masks if --spmask is given),
+                       write the results and a session file, exit
+  --fit-all-lines      with --batch: fit all lines of the lineset instead of the main line only
+  --debug              verbose output
+
+** Modes **
+
+1. Interactive. The default; all functions are available.
+2. Batch (--batch). Fits every spaxel, or every mask when --spmask is given, then
+   writes <cube>_res_<type>_<unit>.fits, the same file without the flagged spaxels
+   (_noflag) and a session file <cube>_<type>_<unit>.kvz. Needs --redshift.
+3. Session. Give a .kvz file instead of a cube: the whole state is restored, for
+   instance to inspect a batch run. Sessions do not store the Monte Carlo cubes;
+   they are regenerated when needed.
+4. Results file. --resfile loads a results file into a fresh session, so results
+   produced elsewhere can be inspected on the cube.
+
+** Quick start **
+
+Left click in the image moves the crosshair; the spectrum of that spaxel appears on
+the right. Left click in the spectrum selects the wavelength plane (or use the slider
+under the image, or the "<" and ">" keys). To build an image over a wavelength range,
+press "s" twice in the spectrum panel at the two limits, then choose Sum1 (or Median1,
+...) in the Mode selector of the toolbar. Drag the handles of the colour bar, or use
+the right mouse button in the image, to change the cuts. Check the redshift and the
+instrumental resolution R in the Line fitting panel, tick the lines to fit (and their
+continuum), and press FIT for the current spaxel or FIT ALL for the whole field.
+
+** The window **
+
+The window has a central spaxel viewer and, in the right column, the Spectrum panel
+and the Line fitting panel (plus the Spectral zoom panel when started with --zoommap).
+The panels can be dragged to other positions or floated. Every start uses the default
+layout.
+
+  Spaxel viewer
+
+Toolbar, from the left:
+  Cube      Data, Noise, Bad pixels, S/N (both spectra are then shown), Fit map,
+            Fit error map, Fit S/N map. The fit maps show the parameter selected with
+            a "Map" button of the results table (or the flag / chi-square maps);
+            spaxels that were never fitted are blank.
+  Mode      Slice, or a combination over wavelength range 1 or 2: Sum, Median,
+            inverse-variance weighted average / median, MedSub (slice minus median),
+            Med2-Med1, Med1-Med2. Ranges are set with "s" in the spectrum panel
+            (Range button: which range is being defined).
+  Scale     HistEq (default), Zscale, MinMax, 99.5 / 99 / 97 / 95 %, User lin / sqrt /
+            log. "Cuts" opens the numeric min / max for the user scalings; dragging
+            the handles of the colour bar sets the user linear cuts directly.
+  Colour    colour table; "Inv" inverts it.
+  Cursor    "+" crosshair (click it again to switch the cursor off), "Sel" / "Desel"
+            paint or erase the current spaxel mask with the mouse.
+  Reset     show the whole field again.
+
+Mouse: left click / drag moves the crosshair or paints the mask; right drag changes
+brightness and contrast; the wheel zooms around the cursor; middle drag or
+shift + left drag pans.
+
+The colour bar is labelled with the displayed quantity; for HistEq, sqrt and log
+scalings its ticks give the data values along the bar. The slider under the image
+selects the wavelength plane. The info row lists the spaxel (and its position in the
+original cube for a trimmed cube), the value, RA / Dec, the current mask and the
+smoothing kernels.
+
+  Spectrum panel
+
+Wheel zooms, drag pans, right drag zooms a box; "Auto" or a double click restores
+the automatic ranges. Left click sets the current wavelength; "s" marks the limits of
+a wavelength range (twice). The fitted components are drawn in red (1st component or
+moments), blue (2nd component) and the total model in dashed green; dotted blue lines
+mark the continuum windows. Toolbar: "y" min / max and "Fix scale" fix the flux axis
+(the same limits are used by the User and sqrt image scalings); "Save" writes the
+displayed spectrum and its noise to FITS; "Range" chooses which wavelength range (1,
+2, or Reset) the "s" key defines; "Extract" chooses how the spectrum of a mask is
+extracted: Spaxel (single), Sum, Median, W. Avg (inverse-variance weighted average),
+MedSub (spaxel minus the median of the mask) or Optimal (Robertson 1986; for point
+sources, sensitive to the background subtraction).
+
+  Line fitting panel
+
+Fit results. The header shows the fit type (GAUSS / MOMENTS, click to switch), the
+redshift (edit and press Enter; this resets the fits), and the fitting unit (SPAXEL /
+MASK, click to switch; in mask mode "-" and "+" step through the masks). The table has
+one row per line, plus the kinematic rows "Line offset" (km/s) and "Line width" (km/s):
+  Comp.      component (1st / 2nd, or blue / red, narrow / broad depending on the
+             2nd component mode)
+  lambda     observed wavelength of the line at the fitted velocity
+  Start      start value (empty = automatic guess)
+  Min, Max   limits used when "Fit with constraints" is on
+  Fix        keep the parameter at its start value
+  Best fit   value +/- error (noise-cube errors) or value +up/-down (bootstrap, MC)
+  Map        show this parameter as a map in the spaxel viewer
+  Fit, Show  fit this component; overplot it on the spectrum
+  Continuum  continuum at the line, with its own Map / Fit / Show buttons
+The rows of the 2nd component appear with the "2nd component rows" switch (or
+automatically when a 2nd component is fitted).
+
+Fit setup (folds away):
+  Fit range blue / red        wavelength range around each lineset used in the fit
+  Continuum bands offset      distance of the two side bands from the lineset centre
+  Continuum percentiles, order  percentile window of the side-band pixels and the
+                              order of the continuum polynomial
+  Autoflag S/N, max sigma error  thresholds used by AUTO FLAG and after FIT ALL
+  Fit with constraints        use the Start / Min / Max values of the table
+  Fix line ratios             tie the [NII], [OIII] and [OI] doublets
+  Fit continuum with the lines  fit a constant together with the lines instead of
+                              subtracting the side-band continuum first
+  2nd component               which component is the second one: the fainter, the one
+                              with the larger velocity offset or the larger width;
+                              "smart" keeps it only when two components are really present
+  Instr. resolution           Fit sky lines (peaks of the variance spectrum), Use
+                              polynomial (header, archive templates or instrument
+                              manual), Use templates; R(lambda) at the main line is
+                              shown next to the buttons, with the polynomial coefficients
+  Errors                      Monte Carlo noise cube, scaling of the noise-cube errors
+                              by sqrt(chi2/dof), saving of MC plots / MC PDFs
+  Worker processes            parallel FIT ALL / FIT ADJ ALL (1 = sequential)
+
+Status row: error method, reduced chi-square of the current fit (with its Map
+button), flag of the current spaxel or mask (OK / BAD / None for a spaxel never
+fitted; click to toggle) with its Map button. During FIT ALL / FIT ADJ ALL a
+progress bar and an Interrupt button appear here and the crosshair follows the
+spaxels being fitted; all other controls are disabled until the loop ends.
+
+Buttons (current spaxel / mask on the top row, all spaxels / masks below):
+  FIT             fit the current spaxel or mask
+  FIT ADJ         fit it using the solution of the adjacent spaxels as initial guess
+  RESET FIT       clear its results
+  AUTO FLAG       flag every fit OK or BAD with the thresholds of Fit setup: OK needs
+                  at least one line with S/N above the threshold and a velocity and
+                  dispersion error below the maximum
+  RESET USER PARS clear the user Start / Min / Max values
+  FIT ALL         fit all spaxels of the FITALL range (Options menu) or all masks,
+                  then AUTO FLAG
+  FIT ADJ ALL     refit BAD spaxels next to OK ones, most OK neighbours first,
+                  iterating until nothing improves
+  RESET FIT ALL   clear all results
+  FLAG ON/OFF     hide or show the BAD spaxels in the fit maps
+  RESET ALL PARS  reset results and settings to their defaults
+  SAVE            write the results of the active error method to FITS
+
+** Linesets **
+
+The fit is done in linesets, sets of lines fitted simultaneously with common
+kinematics; the kinematics of the following linesets are fixed to those of the first
+one fitted. The continuum is estimated per lineset.
+  1  Ha (6563) + [NII] (6548, 6584)    main line Ha
+  2  Hb (4861)                         main line Hb
+  3  [OIII] (4959, 5007)               main line [OIII] 5007
+  4  [SII] (6716, 6731)                main line [SII] 6731
+  5  [OI] (6300, 6364)                 main line [OI] 6364
+  6  [SIII]      7  HeI      8  Lya (1216)
+Without --lineset all lines that fall in the spectral range at the given redshift are
+available. The redshift can also be set interactively: select a wavelength and press
+"z" in the spectrum panel; the selected line is taken to be the main line of the
+active lineset.
+
+** Errors (Errors menu) **
+
+  Noise cube     formal errors of the inverse-variance weighted fit (default)
+  Bootstraps     fits of the bootstrap cubes (needs --bootstrap)
+  Monte Carlo 1  cubes with Gaussian noise of the noise-cube amplitude added, then smoothed
+  Monte Carlo 2  as Monte Carlo 1 but smoothed before adding the noise
+  Monte Carlo 3  as Monte Carlo 2 but with the residuals of a first fit, randomly
+                 shifted in wavelength, instead of the noise cube
+The realisation cubes are created the first time a method is used and need about
+N times the memory of the data cube (N = --nmontecarlo). Results are kept per error
+method; SAVE writes the active one.
+
+** Menus **
+
+  File         Open a cube; Save Image as PNG / as FITS (current image and noise, or
+               the fit map with its error plane); Save Cube as FITS; Display FITS
+               header; Save / Load Session; Quit (nothing is saved on quit).
+  Spax.Masks   Select / Deselect / Clear the current mask; Optimal Mask (spaxels with
+               S/N > 5 in the displayed image); New / Save / Load / Delete Mask;
+               Go to / Previous / Next Mask; Mask Parameters.
+  Errors       error method, see above.
+  Options      Smooth parameters (spatial and spectral kernels; resets the fits);
+               FITALL range (the spaxel rectangle fitted by FIT ALL); Load Results File.
+  Help         What's new, Instructions (this text), Keyboard shortcuts.
+
+** Files **
+
+Results: <name>_res_<gauss|mom>_<spax|mask>.fits, one plane per parameter / error /
+flag, with the plane content described in the header (P1, P2, ...). Results files
+written by the IDL version of kubeviz can be loaded and vice versa. Sessions: .kvz
+files; IDL .sav sessions can be opened read-only. Spectra, images and cubes are saved
+as FITS; Monte Carlo plots as PNG.

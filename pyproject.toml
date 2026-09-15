@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "kubeviz"
 version = "3.0.0a0"
-description = "Interactive visualisation and emission-line fitting of IFU datacubes (Python port of the IDL kubeviz)"
+description = "Interactive visualisation and emission-line fitting of IFU datacubes"
 readme = "README.md"
 license = {text = "GPL-3.0-or-later"}
 authors = [
@@ -32,7 +32,7 @@ kubeviz-compare = "kubeviz.compare:main"
 include = ["kubeviz*"]
 
 [tool.setuptools.package-data]
-kubeviz = ["data/templates/kmos/*.txt", "data/templates/ohspec/*.fits"]
+kubeviz = ["data/templates/kmos/*.txt", "data/templates/ohspec/*.fits", "data/help/*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
