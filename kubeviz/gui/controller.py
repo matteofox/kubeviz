@@ -13,7 +13,7 @@ import os
 import numpy as np
 import logging
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QActionGroup
 from PyQt6.QtWidgets import QApplication, QDockWidget, QFileDialog, QLabel, QMainWindow, QMessageBox
 
@@ -115,10 +115,16 @@ class KubevizGUI(QMainWindow):
         self.addDockWidget(area, self.ctrl_dock)
         self.setCorner(Qt.Corner.BottomRightCorner, Qt.DockWidgetArea.RightDockWidgetArea)
         self.setCorner(Qt.Corner.TopRightCorner, Qt.DockWidgetArea.RightDockWidgetArea)
-        self.resizeDocks([self.spec_dock, self.zoom_dock, self.ctrl_dock], [260, 220, 520], Qt.Orientation.Vertical)
-        self.resizeDocks([self.spec_dock], [980], Qt.Orientation.Horizontal)
         self.zoom_dock.visibilityChanged.connect(self._zoom_dock_visibility)
-        self.resize(1600, 1000)
+        # fit the window to the screen: ~92 % of the available area, at most 1700x1050
+        screen = QApplication.primaryScreen()
+        avail = screen.availableGeometry() if screen is not None else None
+        width = min(1700, int(avail.width() * 0.92)) if avail is not None else 1600
+        height = min(1050, int(avail.height() * 0.92)) if avail is not None else 1000
+        self.setMinimumSize(800, 500)
+        self.resize(width, height)
+        self._small_screen = height < 900
+        self._docks_sized = False
 
         # status bar: last log message, progress and interrupt
         sb = self.statusBar()
@@ -140,6 +146,20 @@ class KubevizGUI(QMainWindow):
         self.zoom_dock.setVisible(bool(state.zoommap))
         self.update_all(UPDATE_FULL)
 
+    def _apply_default_dock_sizes(self):
+        """Right column ~52 % of the width; spectrum / zoom / line fitting 28 / 20 / 52 % of the height."""
+        width, height = self.width(), self.height()
+        self.resizeDocks([self.spec_dock, self.zoom_dock, self.ctrl_dock],
+                         [int(height * 0.28), int(height * 0.20), int(height * 0.52)], Qt.Orientation.Vertical)
+        self.resizeDocks([self.spec_dock, self.zoom_dock, self.ctrl_dock], [int(width * 0.52)] * 3, Qt.Orientation.Horizontal)
+
+    def showEvent(self, ev):
+        super().showEvent(ev)
+        # the dock proportions are applied once the window is laid out at its real size
+        if not self._docks_sized:
+            self._docks_sized = True
+            QTimer.singleShot(0, self._apply_default_dock_sizes)
+
     def _install_linefit(self):
         """(Re)create the line parameter table and the fit controls."""
         self.linefit = LinefitPanels(self)
@@ -150,6 +170,8 @@ class KubevizGUI(QMainWindow):
             old.deleteLater()
         self.ctrl_dock.setWidget(self.linefit.controls)
         self.linefit.interrupt_btn.clicked.connect(self._request_cancel)
+        if getattr(self, "_small_screen", False):
+            self.linefit.setup_group.btn.setChecked(False)      # fold Fit setup on low displays
 
     def show_table(self):
         self.ctrl_dock.show()

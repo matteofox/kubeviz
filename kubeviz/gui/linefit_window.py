@@ -26,8 +26,8 @@ from ..constants import (CKMS, ERR_METHOD_NAMES, FIT_GAUSS, INSTRRES_EXTPOLY, IN
 
 PANEL_STYLE = """
 QLineEdit { padding: 1px 3px; }
-QPushButton { padding: 3px 6px; }
-QPushButton#action { min-height: 30px; }
+QPushButton { padding: 3px 5px; }
+QPushButton#action { min-height: 30px; padding: 3px 4px; }
 QPushButton#save { min-height: 30px; font-weight: bold; }
 """
 
@@ -59,8 +59,8 @@ def _edit(width=62, text="", tip=""):
 def _mono_label(text="", width=None, align_right=True):
     lbl = QLabel(text)
     lbl.setFont(_mono_font())
-    if width:
-        lbl.setMinimumWidth(width)
+    # no explicit minimum width: an explicit one replaces the text-based hint and lets
+    # the grid clip the numbers when the panel is narrow
     if align_right:
         lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
     return lbl
@@ -135,8 +135,10 @@ class LinefitPanels:
         outer.setSpacing(2)
 
         hdr = QHBoxLayout()
-        self.lbl_type = QLabel("GAUSS")
+        self.lbl_type = QPushButton("GAUSS")
         self.lbl_type.setStyleSheet("font-weight: bold")
+        self.lbl_type.setToolTip("Fit type: click to switch between Gaussian fits and moments")
+        self.lbl_type.clicked.connect(lambda: self.ctl.linefit_action("TYPE"))
         hdr.addWidget(QLabel("Fit type"))
         hdr.addWidget(self.lbl_type)
         hdr.addSpacing(14)
@@ -146,8 +148,10 @@ class LinefitPanels:
         self.edit_z.returnPressed.connect(lambda: self._text("REDSHIFT", self.edit_z))
         hdr.addWidget(self.edit_z)
         hdr.addSpacing(14)
-        self.lbl_mode = QLabel("SPAXEL")
+        self.lbl_mode = QPushButton("SPAXEL")
         self.lbl_mode.setStyleSheet("font-weight: bold")
+        self.lbl_mode.setToolTip("Fitting unit: click to switch between single spaxels and masks")
+        self.lbl_mode.clicked.connect(lambda: self.ctl.linefit_action("MODE"))
         hdr.addWidget(self.lbl_mode)
         self.lbl_sel = _mono_label("", align_right=False)
         hdr.addWidget(self.lbl_sel)
@@ -192,7 +196,7 @@ class LinefitPanels:
         scroll.setWidgetResizable(True)
         scroll.setWidget(table)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setMinimumHeight(6 * 26 + 30)          # header + about six rows; grows with the dock
+        scroll.setMinimumHeight(4 * 26 + 30)          # header + four rows at least; grows with the dock
         scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.table_scroll = scroll
         outer.addWidget(scroll, stretch=1)
@@ -319,41 +323,36 @@ class LinefitPanels:
         g.setContentsMargins(6, 2, 6, 2)
         g.setHorizontalSpacing(8)
         g.setVerticalSpacing(2)
-        g.addWidget(QLabel("Fit range blue / red (Å)"), 0, 0)
         self.edit_maxwoffb, self.edit_maxwoffr = _edit(62), _edit(62)
-        rr = QHBoxLayout()
-        rr.addWidget(self.edit_maxwoffb)
-        rr.addWidget(self.edit_maxwoffr)
-        rr.addStretch(1)
-        g.addLayout(rr, 0, 1)
+        self.edit_cminoff, self.edit_cmaxoff = _edit(62), _edit(62)
+        self.edit_cminperc, self.edit_cmaxperc = _edit(52), _edit(52)
+        self.edit_corder = _edit(34)
+        self.edit_snthresh = _edit(62)
+        self.edit_maxvelerr = _edit(62)
         self.cb_contmode = QCheckBox("Fit continuum with the lines (MPFIT CONT)")
         self.cb_contmode.setToolTip("Off: continuum from side bands, subtracted before the fit. "
                                     "On: a constant fitted together with the lines")
         self.cb_contmode.clicked.connect(lambda: self.ctl.linefit_action("CONTMODE"))
-        g.addWidget(self.cb_contmode, 0, 2, 1, 2)
-        g.addWidget(QLabel("Side bands offset min / max (Å)"), 1, 0)
-        self.edit_cminoff, self.edit_cmaxoff = _edit(62), _edit(62)
-        rr = QHBoxLayout()
-        rr.addWidget(self.edit_cminoff)
-        rr.addWidget(self.edit_cmaxoff)
-        rr.addStretch(1)
-        g.addLayout(rr, 1, 1)
-        g.addWidget(QLabel("Percentiles min / max, order"), 1, 2)
-        self.edit_cminperc, self.edit_cmaxperc = _edit(52), _edit(52)
-        self.edit_corder = _edit(34)
-        rr = QHBoxLayout()
-        rr.addWidget(self.edit_cminperc)
-        rr.addWidget(self.edit_cmaxperc)
-        rr.addWidget(self.edit_corder)
-        rr.addStretch(1)
-        g.addLayout(rr, 1, 3)
-        g.addWidget(QLabel("Autoflag S/N threshold"), 2, 0)
-        self.edit_snthresh = _edit(62)
-        g.addWidget(self.edit_snthresh, 2, 1)
-        g.addWidget(QLabel("Max velocity / dispersion error (km/s)"), 2, 2)
-        self.edit_maxvelerr = _edit(62)
-        g.addWidget(self.edit_maxvelerr, 2, 3)
-        g.setColumnStretch(4, 1)
+        rows = [("Fit range blue / red (Å)", [self.edit_maxwoffb, self.edit_maxwoffr],
+                 "Wavelength range around each lineset used in the fit"),
+                ("Continuum bands offset min / max (Å)", [self.edit_cminoff, self.edit_cmaxoff],
+                 "Distance from the lineset centre of the two side bands used for the continuum"),
+                ("Continuum percentiles, order", [self.edit_cminperc, self.edit_cmaxperc, self.edit_corder],
+                 "Percentile window of the side-band pixels and polynomial order of the continuum"),
+                ("Autoflag S/N, max σ error (km/s)", [self.edit_snthresh, self.edit_maxvelerr],
+                 "AUTO FLAG thresholds: minimum S/N and maximum velocity / dispersion error")]
+        for r, (text, edits, tip) in enumerate(rows):
+            lbl = QLabel(text)
+            lbl.setToolTip(tip)
+            g.addWidget(lbl, r, 0)
+            rr = QHBoxLayout()
+            rr.setSpacing(4)
+            for e in edits:
+                rr.addWidget(e)
+            rr.addStretch(1)
+            g.addLayout(rr, r, 1)
+        g.addWidget(self.cb_contmode, len(rows), 0, 1, 2)
+        g.setColumnStretch(1, 1)
         for e, code in ((self.edit_maxwoffb, "LINEFITMAXOFFB"), (self.edit_maxwoffr, "LINEFITMAXOFFR"),
                         (self.edit_cminoff, "CONTMINOFF"), (self.edit_cmaxoff, "CONTMAXOFF"),
                         (self.edit_cminperc, "CONTMINPERC"), (self.edit_cmaxperc, "CONTMAXPERC"),
@@ -361,7 +360,8 @@ class LinefitPanels:
                         (self.edit_maxvelerr, "MASKMAXVELERR")):
             e.setPlaceholderText("")
             e.editingFinished.connect(lambda c=code, ee=e: self._text(c, ee))
-        lay.addWidget(Collapsible("Fit setup", setup, expanded=True))
+        self.setup_group = Collapsible("Fit setup", setup, expanded=True)
+        lay.addWidget(self.setup_group)
 
         # ---- Options
         opts = QWidget()
@@ -382,7 +382,9 @@ class LinefitPanels:
         self.cb_fixratios = QCheckBox("Fix line ratios ([NII], [OIII], [OI])")
         self.cb_fixratios.clicked.connect(lambda: self.ctl.linefit_action("FIXRATIOS"))
         r1.addWidget(self.cb_fixratios)
-        r1.addSpacing(12)
+        r1.addStretch(1)
+        g.addLayout(r1, 0, 0)
+        r1 = QHBoxLayout()
         self.lbl_second = QLabel("2nd component:")
         r1.addWidget(self.lbl_second)
         self.rb_second = [QRadioButton("fainter"), QRadioButton("larger offset"), QRadioButton("larger width")]
@@ -396,7 +398,7 @@ class LinefitPanels:
         self.cb_smart.clicked.connect(lambda: self.ctl.linefit_action("SMART_2ND"))
         r1.addWidget(self.cb_smart)
         r1.addStretch(1)
-        g.addLayout(r1, 0, 0)
+        g.addLayout(r1, 1, 0)
         r2 = QHBoxLayout()
         r2.setSpacing(4)
         r2.addWidget(QLabel("Instr. resolution:"))
@@ -411,32 +413,39 @@ class LinefitPanels:
         self.btn_tpl = QPushButton("Use templates")
         self.btn_tpl.clicked.connect(lambda: self.ctl.linefit_action("TPLSKY"))
         r2.addWidget(self.btn_tpl)
-        r2.addSpacing(8)
-        r2.addWidget(QLabel("R(main line) ="))
-        self.lbl_instrres = _mono_label("", 70, align_right=False)
-        r2.addWidget(self.lbl_instrres)
-        self.lbl_instrres_mode = QLabel("")
-        r2.addWidget(self.lbl_instrres_mode)
         r2.addStretch(1)
-        g.addLayout(r2, 1, 0)
+        g.addLayout(r2, 2, 0)
+        r2b = QHBoxLayout()
+        r2b.setSpacing(4)
+        r2b.addWidget(QLabel("R at the main line:"))
+        self.lbl_instrres = _mono_label("", 60, align_right=False)
+        r2b.addWidget(self.lbl_instrres)
+        self.lbl_instrres_mode = QLabel("")
+        self.lbl_instrres_mode.setStyleSheet("color: #6b6b6b")
+        r2b.addWidget(self.lbl_instrres_mode)
+        r2b.addStretch(1)
+        g.addLayout(r2b, 3, 0)
         r3 = QHBoxLayout()
         r3.setSpacing(4)
         r3.addWidget(QLabel("Polynomial coefficients:"))
         self.edit_coeff = []
         for i in range(st.max_polycoeff_instrres + 1):
-            e = _edit(90)
+            e = _edit(64)
             e.setPlaceholderText("")
             e.editingFinished.connect(lambda i=i, ee=e: self._text(f"POLYCOEFFPAR{i}", ee))
             self.edit_coeff.append(e)
             r3.addWidget(e)
         r3.addStretch(1)
-        g.addLayout(r3, 2, 0)
+        g.addLayout(r3, 4, 0)
         lay.addWidget(Collapsible("Options", opts, expanded=False))
 
         # ---- Status
         status = QWidget()
-        g = QHBoxLayout(status)
-        g.setContentsMargins(6, 2, 6, 2)
+        gv = QVBoxLayout(status)
+        gv.setContentsMargins(6, 2, 6, 2)
+        gv.setSpacing(2)
+        g = QHBoxLayout()
+        gv.addLayout(g)
         g.addWidget(QLabel("Errors:"))
         self.lbl_errmethod = QLabel("")
         g.addWidget(self.lbl_errmethod)
@@ -459,10 +468,14 @@ class LinefitPanels:
         self.image_group.addButton(self.rb_flag)
         self.rb_flag.clicked.connect(lambda: self.ctl.linefit_action("IMAGEFLAG"))
         g.addWidget(self.rb_flag)
-        g.addSpacing(10)
-        self.lbl_mc = QLabel("")
-        g.addWidget(self.lbl_mc)
         g.addStretch(1)
+        g2 = QHBoxLayout()
+        gv.addLayout(g2)
+        self.lbl_mc = QLabel("")
+        self.lbl_mc.setWordWrap(True)
+        self.lbl_mc.setStyleSheet("color: #6b6b6b")
+        g2.addWidget(self.lbl_mc, 1)
+        g = g2
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 1000)
         self.progress_bar.setFixedWidth(220)
@@ -496,9 +509,7 @@ class LinefitPanels:
              ("FLAG ON/OFF", "RESIMAMASK", "Show flagged spaxels in the result maps or hide them")),
             (("RESET USER PARS", "RESETUSER", "Reset user start values and limits"),
              ("RESET ALL PARS", "RESETALL", "Reset fit, user values and settings")),
-            (("MASK / SPAXEL", "MODE", "Switch mask / spaxel fitting"),
-             ("GAUSS / MOMENTS", "TYPE", "Switch Gaussian fits / moments")),
-        ]
+        ]   # mask/spaxel and Gauss/moments are toggled from the Fit results header
         for col, items in enumerate(columns):
             for row, (text, code, tip) in enumerate(items):
                 btn = QPushButton(text)

@@ -11,7 +11,7 @@ import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QPainterPath, QPen
-from PyQt6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QPushButton, QSlider, QToolButton,
+from PyQt6.QtWidgets import (QSizePolicy, QComboBox, QHBoxLayout, QLabel, QPushButton, QSlider, QToolButton,
                              QVBoxLayout, QWidget)
 
 from ..constants import (CUBE_BADPIX, CUBE_DATA, CUBE_LINEFIT, CUBE_LINEFIT_ERR, CUBE_LINEFIT_SN,
@@ -80,12 +80,21 @@ class SpaxelViewBox(pg.ViewBox):
         self.keyPressed.emit(ev)
 
 
+SHORT_NAMES = {"Linefit errors": "Fit errors", "Linefit S/N": "Fit S/N", "Weighted Avg1": "W.Avg1",
+               "Weighted Med1": "W.Med1", "Weighted Avg2": "W.Avg2", "Weighted Med2": "W.Med2",
+               "STD GAMMA-II": "Gamma II", "User linear": "User lin", "User log10": "User log"}
+
+
 def _combo(items, tip):
+    """Toolbar combo that can shrink on small screens and grows with the available width."""
     c = QComboBox()
     for label, code in items:
-        c.addItem(label, code)
+        c.addItem(SHORT_NAMES.get(label, label), code)
     c.setToolTip(tip)
-    c.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+    c.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+    c.setMinimumContentsLength(4)
+    c.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    c.setMaximumWidth(150)
     return c
 
 
@@ -115,7 +124,7 @@ class SpaxelView(QWidget):
 
         # ---------------- toolbar
         tb = QHBoxLayout()
-        tb.setSpacing(6)
+        tb.setSpacing(4)
         self.cube_combo = _combo(CUBE_ITEMS, "Which cube / map to display")
         self.mode_combo = _combo([(n, i) for i, n in enumerate(IMGMODE_NAMES)], "Image mode: single slice or a combination over a wavelength range")
         self.zcut_combo = _combo(ZCUT_ITEMS, "Intensity scaling")
@@ -125,7 +134,7 @@ class SpaxelView(QWidget):
         self.invert_btn.setCheckable(True)
         self.invert_btn.setToolTip("Invert the colour table")
         self.cuts_btn = QToolButton()
-        self.cuts_btn.setText("Cuts…")
+        self.cuts_btn.setText("Cuts")
         self.cuts_btn.setToolTip("Type the minimum / maximum for the user scalings (or drag the colour bar handles)")
         self.cuts_btn.clicked.connect(self.userCutsRequested)
         self.cursor_btns = []
@@ -140,21 +149,18 @@ class SpaxelView(QWidget):
             b.clicked.connect(lambda checked=False, m=mode: self.cursorModeSelected.emit(m if checked else (0 if m == 1 else 1)))
             self.cursor_btns.append(b)
         self.cursor_btns[0].setChecked(True)
-        tb.addWidget(QLabel("Cube"))
-        tb.addWidget(self.cube_combo)
-        tb.addWidget(QLabel("Mode"))
-        tb.addWidget(self.mode_combo)
-        tb.addWidget(QLabel("Scale"))
-        tb.addWidget(self.zcut_combo)
+        tb.addWidget(self.cube_combo, 1)
+        tb.addWidget(self.mode_combo, 1)
+        tb.addSpacing(6)
+        tb.addWidget(self.zcut_combo, 1)
         tb.addWidget(self.cuts_btn)
-        tb.addWidget(self.colour_combo)
+        tb.addWidget(self.colour_combo, 1)
         tb.addWidget(self.invert_btn)
-        tb.addSpacing(10)
-        tb.addWidget(QLabel("Cursor"))
+        tb.addSpacing(6)
         for b in self.cursor_btns:
             tb.addWidget(b)
-        tb.addStretch(1)
-        self.reset_btn = QPushButton("Reset view")
+        tb.addStretch(2)
+        self.reset_btn = QPushButton("Reset")
         self.reset_btn.setToolTip("Show the whole field (wheel: zoom, middle-drag / shift-drag: pan)")
         self.reset_btn.clicked.connect(self.resetViewRequested)
         tb.addWidget(self.reset_btn)
