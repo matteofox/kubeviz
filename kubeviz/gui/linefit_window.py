@@ -599,7 +599,7 @@ class LinefitPanels:
         return panel
 
     def show_results(self):
-        """Expand the Fit results group (Options -> Show line fitting panel)."""
+        """Expand the Fit results group."""
         self.results_group.btn.setChecked(True)
 
     # ================================================================== events

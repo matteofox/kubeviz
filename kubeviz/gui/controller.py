@@ -99,15 +99,19 @@ class KubevizGUI(QMainWindow):
         self.zoom = SpecZoomView()
         self.setCentralWidget(self.spax)
 
-        def dock(title, widget, name):
+        def dock(title, widget, name, closable=False):
             d = QDockWidget(title, self)
             d.setObjectName(name)
             d.setWidget(widget)
-            d.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
-                          | QDockWidget.DockWidgetFeature.DockWidgetClosable)
+            feats = QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+            if closable:
+                feats |= QDockWidget.DockWidgetFeature.DockWidgetClosable
+            d.setFeatures(feats)
             return d
+        # the spectrum and the line fitting panel are always there; the zoom panel is
+        # shown / hidden with the 'Zoom panel' button of the spectrum toolbar
         self.spec_dock = dock("Spectrum", self.spec, "dock_spectrum")
-        self.zoom_dock = dock("Spectral zoom", self.zoom, "dock_zoom")
+        self.zoom_dock = dock("Spectral zoom", self.zoom, "dock_zoom", closable=True)
         self.ctrl_dock = dock("Line fitting", None, "dock_controls")
         area = Qt.DockWidgetArea.RightDockWidgetArea
         self.addDockWidget(area, self.spec_dock)
@@ -174,12 +178,6 @@ class KubevizGUI(QMainWindow):
         if getattr(self, "_small_screen", False):
             self.linefit.setup_group.btn.setChecked(False)      # fold Fit setup on low displays
 
-    def show_table(self):
-        self.ctrl_dock.show()
-        self.ctrl_dock.raise_()
-        self.linefit.show_results()
-        self.state.linefitmap = True
-
     def _zoom_dock_visibility(self, visible):
         self.state.zoommap = bool(visible)
         if visible:
@@ -241,8 +239,7 @@ class KubevizGUI(QMainWindow):
         self._add_menu(mb, "Errors", [("Use Noise-cube", "NoiseErrors"), ("Use Bootstraps", "BootstrapErrors"), ("Use Monte Carlo 1", "Mc1Errors"),
                                       ("Use Monte Carlo 2", "Mc2Errors"), ("Use Monte Carlo 3", "Mc3Errors")], self.err_group)
         self._add_menu(mb, "Options", [("Smooth parameters...", "SmoothPars"), ("FITALL range...", "FitallRange"),
-                                       ("Load Results File...", "LoadResultFile"), None,
-                                       ("Show line fitting panel", "ShowLinefit"), ("Show spectral zoom panel", "ToggleZoom")])
+                                       ("Load Results File...", "LoadResultFile")])
         self._add_menu(mb, "Help", [("What's new", "HelpWhatIsNew"), ("Instructions", "HelpInstructions"),
                                     ("Keyboard shortcuts", "HelpShortcuts"), ("Python port notes", "HelpPython")])
         self._sync_menu_checks()
@@ -1080,13 +1077,6 @@ class KubevizGUI(QMainWindow):
                     self.replace_state(new)
                 except Exception as exc:
                     QMessageBox.critical(self, "kubeviz", f"Could not load session:\n{exc}")
-            return
-        if code == "ToggleZoom":
-            self.zoom_dock.setVisible(True)
-            self.zoom_dock.raise_()
-            return
-        if code == "ShowLinefit":
-            self.show_table()
             return
         if code.startswith("Help"):
             {"HelpWhatIsNew": dialogs.help_whatsnew, "HelpInstructions": dialogs.help_instructions,
