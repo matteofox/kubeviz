@@ -56,9 +56,31 @@ def _edit(width=62, text="", tip=""):
     return e
 
 
-def _mono_label(text="", width=None, align_right=True):
-    lbl = QLabel(text)
-    lbl.setFont(_mono_font())
+class MonoLabel(QLabel):
+    """Monospaced label that reserves room for ``template`` so a column keeps its width
+    while the numbers change from spaxel to spaxel (a longer text still fits)."""
+
+    def __init__(self, text="", template=""):
+        super().__init__(text)
+        self.setFont(_mono_font())
+        self._template = template
+
+    def _template_width(self) -> int:
+        return self.fontMetrics().horizontalAdvance(self._template) if self._template else 0
+
+    def minimumSizeHint(self):
+        s = super().minimumSizeHint()
+        s.setWidth(max(s.width(), self._template_width()))
+        return s
+
+    def sizeHint(self):
+        s = super().sizeHint()
+        s.setWidth(max(s.width(), self._template_width()))
+        return s
+
+
+def _mono_label(text="", width=None, align_right=True, template=""):
+    lbl = MonoLabel(text, template)
     # no explicit minimum width: an explicit one replaces the text-based hint and lets
     # the grid clip the numbers when the panel is narrow
     if align_right:
@@ -110,8 +132,8 @@ class Collapsible(QWidget):
 class LinefitPanels:
     """Builds ``self.table`` and ``self.controls`` for a controller/state pair."""
 
-    COLS = ["", "comp.", "λ cen", "start", "best", "min", "max", "fix", "reset", "img", "fit", "show",
-            "continuum", "img", "fit", "show"]
+    COLS = ["", "Comp.", "λ (Å)", "Start", "Best fit", "Min", "Max", "Fix", "Reset", "Map", "Fit", "Show",
+            "Continuum", "Map", "Fit", "Show"]
     _BANDS = ("#f7f7f7", "#e8e8e8")
 
     def __init__(self, controller):
@@ -222,12 +244,12 @@ class LinefitPanels:
         self.grid.addWidget(d["label"], row, 0)
         d["comp"] = QLabel(comp_text)
         self.grid.addWidget(d["comp"], row, 1)
-        d["lamb"] = _mono_label("", 64)
+        d["lamb"] = _mono_label("", template="99999.99")
         self.grid.addWidget(d["lamb"], row, 2)
         d["start"] = _edit(56, tip="Start value (empty = automatic guess)")
         d["start"].editingFinished.connect(lambda c="SP" + code, e=d["start"]: self._text(c, e))
         self.grid.addWidget(d["start"], row, 3)
-        d["best"] = _mono_label("Not Fit", 150)
+        d["best"] = _mono_label("Not Fit", template="-99999.99+9999.99/-9999.99")
         self.grid.addWidget(d["best"], row, 4)
         d["min"] = _edit(52, tip="Lower limit (used when 'Fit with constraints' is on)")
         d["max"] = _edit(52, tip="Upper limit (used when 'Fit with constraints' is on)")
@@ -262,7 +284,7 @@ class LinefitPanels:
         if cont_par is not None:
             c = {}
             ccode = f"C{cont_par}"
-            c["best"] = _mono_label("Not Fit", 140)
+            c["best"] = _mono_label("Not Fit", template="-99.9999+9.9999/-9.9999")
             self.grid.addWidget(c["best"], row, 12)
             c["image"] = QRadioButton()
             c["image"].setToolTip("Show the continuum at this line as a map")
@@ -601,6 +623,7 @@ class LinefitPanels:
             if gauss:
                 lt = st.par_imagebutton[:1]
                 flag = {"B": b[0], "C": c[0]}.get(lt, n[0])
+                fitted = {"B": berr[1, 0], "C": cerr[1, 0]}.get(lt, nerr[1, 0]) != NOT_FIT
                 for par in range(1, 3 + st.Nlines):
                     self.w[("N", par)]["best"].setText(utils.resultsstring(n[par], nerr[par, :2], sym))
                     self.w[("B", par)]["best"].setText(utils.resultsstring(b[par], berr[par, :2], sym))
@@ -608,10 +631,11 @@ class LinefitPanels:
                         self.w[("C", par)]["best"].setText(_cont_string(c[par - 2], cerr[par - 2, :2], sym))
                 self.lbl_chisq.setText(f"{rs.chisq[idx]:.4f}")
             else:
-                flag = 0
+                flag, fitted = 0, False
                 if st.Nlines > 0:
                     mi = st.mainline_index()
                     flag = m[6 * mi + 5]
+                    fitted = merr[6 * mi + 1, 0] != NOT_FIT
                     for par in (1, 2):
                         self.w[("N", par)]["best"].setText(utils.resultsstring(m[6 * mi + par], merr[6 * mi + par, :2], sym))
                         self.w[("B", par)]["best"].setText("")
@@ -631,7 +655,7 @@ class LinefitPanels:
                     self.w[("B", par)]["lamb"].setText(f"{st.lines[iline] * (1 + bdv / CKMS):.2f}")
                 else:
                     self.w[("N", par)]["lamb"].setText(f"{st.lines[iline] * (1 + m[6 * iline + 1] / CKMS):.2f}")
-            self.set_flag_button(flag)
+            self.set_flag_button(flag, fitted)
 
             self.edit_z.setText(f"{st.redshift:.6f}")
             R = float(st.getinstrres()) if st.Nlines > 0 else 0.0
@@ -698,7 +722,13 @@ class LinefitPanels:
         finally:
             self._building = False
 
-    def set_flag_button(self, flag):
+    def set_flag_button(self, flag, fitted: bool = True):
+        """OK (green) / BAD (red); a spaxel that was never fitted shows None (grey) while
+        it is still treated as bad internally."""
+        if not fitted:
+            self.btn_flag.setText("None")
+            self.btn_flag.setStyleSheet("background-color: #d8d8d8; color: #555555; font-weight: bold")
+            return
         bad = flag > 0
         self.btn_flag.setText("BAD" if bad else "OK")
         self.btn_flag.setStyleSheet("background-color: #e06060; color: white; font-weight: bold" if bad
