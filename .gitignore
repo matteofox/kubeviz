@@ -10,3 +10,6 @@ venv/
 lastsession.kvz
 *.kvz
 fit_errmsg_*.txt
+
+# working notes, not part of the repository
+QUESTIONS.md

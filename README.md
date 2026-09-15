@@ -10,6 +10,12 @@ This repository contains two implementations:
 * **`kubeviz.pro` (IDL, V2.2)** - the original program, unchanged, with its `addons/`,
   `templates/` and `doc/` directories. The IDL instructions follow below.
 
+**IDL users: nothing changes for you.** `kubeviz.pro`, `addons/`, `templates/` and `doc/` are
+exactly as before and stay at the root of the repository, so an existing `IDL_PATH` pointing
+here keeps working. The last IDL-only state of the repository is tagged `idl-v2.2`
+(`git checkout idl-v2.2`). The Python port lives in its own package directory and does not
+touch the IDL files; results files written by either version are readable by the other.
+
 ## Python quick start
 
 ```bash
