@@ -41,7 +41,7 @@ class State:
     version: str = __version__
     debug: bool = False
     percent_step: int = 10
-    nproc: int = 0                                  # worker processes for FIT ALL (0 = automatic)
+    nproc: int = 1                                  # worker processes for FIT ALL / FIT ADJ ALL (0 = automatic)
     filename: str = ""
     indir: str = ""
     cwdir: str = ""

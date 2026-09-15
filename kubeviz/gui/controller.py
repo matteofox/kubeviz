@@ -828,6 +828,10 @@ class KubevizGUI(QMainWindow):
             st.continuumfit_order = int(value)
             lf.update_all()
             return
+        if code == "NPROC":
+            st.nproc = max(1, int(value))
+            utils.info(f"FIT ALL / FIT ADJ ALL will use {st.nproc} worker process(es)")
+            return
         if code.startswith("POLYCOEFFPAR"):
             i = int(code[12:])
             if st.instrres_mode == 0:

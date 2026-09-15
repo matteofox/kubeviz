@@ -80,8 +80,9 @@ def fitall(state, spaxel: bool = True, should_cancel=None, on_progress=None, on_
     """Fit every spaxel in ``state.fitallrange`` (or every mask).
 
     Spaxels are fitted by ``nproc`` forked worker processes (default ``state.nproc``,
-    0 = all cores but one, at most 8); ``nproc=1`` runs the sequential loop. Masks are
-    always fitted sequentially. Returns True when the loop completed, False when cancelled.
+    which is 1 = sequential unless set with ``--nproc`` or in the fit Options; 0 = all
+    cores but one, at most 8). Masks are always fitted sequentially. Returns True when
+    the loop completed, False when cancelled.
     """
     state.zoomspax = 1
     completed = True

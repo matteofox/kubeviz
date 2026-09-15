@@ -6,7 +6,8 @@ travel back (a few hundred numbers per spaxel). The workers never touch Qt. Each
 spaxel is fitted by exactly the same code as the sequential loop (``dofit``); the
 Monte Carlo realisations use fixed per-realisation seeds and do not depend on the
 order of the fits. One pool is forked per FIT ALL / FIT ADJ ALL call; a worker that
-dies raises ``BrokenProcessPool`` instead of hanging the loop.
+dies raises ``BrokenProcessPool`` instead of hanging the loop. Interrupt drops the
+queued chunks and lets the running ones finish.
 """
 from __future__ import annotations
 
@@ -51,12 +52,12 @@ class FitPool:
         return False
 
     def close(self, cancel: bool = False):
+        """Shut the pool down; with ``cancel`` the queued chunks are dropped and only the
+        chunks already running finish (well under a second), so the executor is never
+        left in a broken state that would stall the interpreter at exit."""
         global _STATE
         if self.executor is not None:
-            if cancel:
-                for p in list(getattr(self.executor, "_processes", {}).values()):
-                    p.terminate()
-            self.executor.shutdown(wait=not cancel, cancel_futures=cancel)
+            self.executor.shutdown(wait=True, cancel_futures=cancel)
             self.executor = None
         _STATE = None
 

@@ -39,8 +39,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--lineset", type=int, default=0,
                    help="1 Ha+[NII], 2 [OIII], 3 [OII], 4 Hb, 5 [SII], 6 [OI], 7 [SIII], 8 HeI, 9 Lya (default 0: all)")
     p.add_argument("--debug", action="store_true", help="increase verbosity")
-    p.add_argument("--nproc", type=int, default=0,
-                   help="worker processes for FIT ALL (default 0 = all cores but one, at most 8; 1 = sequential)")
+    p.add_argument("--nproc", type=int, default=1,
+                   help="worker processes for FIT ALL / FIT ADJ ALL (default 1 = sequential; 0 = all cores but one, "
+                        "at most 8); can be changed in the fit Options")
     p.add_argument("--mask-sn-thresh", type=float, dest="mask_sn_thresh", help="S/N threshold for autoflag (default 3)")
     p.add_argument("--mask-maxvelerr", type=float, dest="mask_maxvelerr", help="max velocity error for autoflag (default 50 km/s)")
     p.add_argument("--mom-thresh", type=float, dest="mom_thresh", help="flux threshold for moments (default 0.5)")

@@ -12,12 +12,14 @@ codes (``'FIT'``, ``'SPN3'``, ``'MINPB1'``, ``'FIXN2'``, ``'IMAGEC4'`` ...).
 """
 from __future__ import annotations
 
+import os
+
 import numpy as np
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (QButtonGroup, QCheckBox, QFrame, QGridLayout, QHBoxLayout, QLabel,
                              QLineEdit, QProgressBar, QPushButton, QRadioButton, QScrollArea,
-                             QSizePolicy, QToolButton, QVBoxLayout, QWidget)
+                             QSizePolicy, QSpinBox, QToolButton, QVBoxLayout, QWidget)
 
 from .. import utils
 from .qtenv import APP_FONT_POINTS
@@ -449,13 +451,26 @@ class LinefitPanels:
         r3.addWidget(QLabel("Polynomial coefficients:"))
         self.edit_coeff = []
         for i in range(st.max_polycoeff_instrres + 1):
-            e = _edit(64)
+            e = _edit(80)
             e.setPlaceholderText("")
             e.editingFinished.connect(lambda i=i, ee=e: self._text(f"POLYCOEFFPAR{i}", ee))
             self.edit_coeff.append(e)
             r3.addWidget(e)
         r3.addStretch(1)
         g.addLayout(r3, 4, 0)
+        r4 = QHBoxLayout()
+        r4.setSpacing(4)
+        r4.addWidget(QLabel("Worker processes for FIT ALL / FIT ADJ ALL:"))
+        self.spin_nproc = QSpinBox()
+        self.spin_nproc.setRange(1, max(1, os.cpu_count() or 1))
+        self.spin_nproc.setToolTip("Forked worker processes; 1 = sequential (IDL order). FIT ALL results do not depend on it")
+        self.spin_nproc.valueChanged.connect(lambda v: self._text("NPROC", None, v))
+        r4.addWidget(self.spin_nproc)
+        self.lbl_cores = QLabel(f"({os.cpu_count() or 1} cores)")
+        self.lbl_cores.setStyleSheet("color: #6b6b6b")
+        r4.addWidget(self.lbl_cores)
+        r4.addStretch(1)
+        g.addLayout(r4, 5, 0)
         lay.addWidget(Collapsible("Options", opts, expanded=False))
 
         # ---- Status
@@ -554,8 +569,11 @@ class LinefitPanels:
         self.results_group.btn.setChecked(True)
 
     # ================================================================== events
-    def _text(self, code, edit):
+    def _text(self, code, edit, value=None):
         if self._building:
+            return
+        if edit is None:                       # value given directly (spin boxes)
+            self.ctl.linefit_action(code, value)
             return
         txt = edit.text().strip()
         if txt.lower() in ("not set", "", "auto"):
@@ -674,6 +692,7 @@ class LinefitPanels:
             self.edit_cmaxperc.setText(f"{st.continuumfit_maxperc:.2f}")
             self.edit_corder.setText(f"{int(st.continuumfit_order)}")
             self.btn_tpl.setEnabled(st.instrres_tplsig > 0)
+            self.spin_nproc.setValue(int(st.nproc) if st.nproc > 0 else self.spin_nproc.maximum())
 
             self.image_group.setExclusive(False)
             for btn in self.image_group.buttons():
