@@ -132,7 +132,7 @@ class Collapsible(QWidget):
 class LinefitPanels:
     """Builds ``self.table`` and ``self.controls`` for a controller/state pair."""
 
-    COLS = ["", "Comp.", "λ (Å)", "Start", "Best fit", "Min", "Max", "Fix", "Reset", "Map", "Fit", "Show",
+    COLS = ["", "Comp.", "λ (Å)", "Start", "Min", "Max", "Fix", "Best fit", "Map", "Fit", "Show",
             "Continuum", "Map", "Fit", "Show"]
     _BANDS = ("#f7f7f7", "#e8e8e8")
 
@@ -249,56 +249,51 @@ class LinefitPanels:
         d["start"] = _edit(56, tip="Start value (empty = automatic guess)")
         d["start"].editingFinished.connect(lambda c="SP" + code, e=d["start"]: self._text(c, e))
         self.grid.addWidget(d["start"], row, 3)
-        d["best"] = _mono_label("Not Fit", template="-99999.99+9999.99/-9999.99")
-        self.grid.addWidget(d["best"], row, 4)
+        d["best"] = _mono_label("Not Fit", template="-999.99+9999.99/-9999.99")
         d["min"] = _edit(52, tip="Lower limit (used when 'Fit with constraints' is on)")
         d["max"] = _edit(52, tip="Upper limit (used when 'Fit with constraints' is on)")
         d["min"].editingFinished.connect(lambda c="MINP" + code, e=d["min"]: self._text(c, e))
         d["max"].editingFinished.connect(lambda c="MAXP" + code, e=d["max"]: self._text(c, e))
-        self.grid.addWidget(d["min"], row, 5)
-        self.grid.addWidget(d["max"], row, 6)
+        self.grid.addWidget(d["min"], row, 4)
+        self.grid.addWidget(d["max"], row, 5)
         d["fix"] = QCheckBox()
         d["fix"].setToolTip("Keep this parameter fixed at its start value")
         d["fix"].clicked.connect(lambda _=False, c="FIX" + code: self.ctl.linefit_action(c))
-        self.grid.addWidget(d["fix"], row, 7, alignment=Qt.AlignmentFlag.AlignCenter)
-        d["reset"] = QToolButton()
-        d["reset"].setText("×")
-        d["reset"].setToolTip("Reset this parameter's result")
-        d["reset"].clicked.connect(lambda _=False, c="RESET" + code: self.ctl.linefit_action(c))
-        self.grid.addWidget(d["reset"], row, 8, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.grid.addWidget(d["fix"], row, 6, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.grid.addWidget(d["best"], row, 7)
         d["image"] = QRadioButton()
         d["image"].setToolTip("Show this parameter as a map in the spaxel viewer")
         self.image_group.addButton(d["image"])
         d["image"].clicked.connect(lambda _=False, c="IMAGE" + code: self.ctl.linefit_action(c))
-        self.grid.addWidget(d["image"], row, 9, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.grid.addWidget(d["image"], row, 8, alignment=Qt.AlignmentFlag.AlignCenter)
         if with_fit_show:
             d["fit"] = QCheckBox()
             d["fit"].setToolTip("Fit this component")
             d["fit"].clicked.connect(lambda _=False, c="FIT" + code: self.ctl.linefit_action(c))
-            self.grid.addWidget(d["fit"], row, 10, alignment=Qt.AlignmentFlag.AlignCenter)
+            self.grid.addWidget(d["fit"], row, 9, alignment=Qt.AlignmentFlag.AlignCenter)
             d["show"] = QCheckBox()
             d["show"].setToolTip("Overplot this component on the spectrum")
             d["show"].clicked.connect(lambda _=False, c="SHOW" + code: self.ctl.linefit_action(c))
-            self.grid.addWidget(d["show"], row, 11, alignment=Qt.AlignmentFlag.AlignCenter)
+            self.grid.addWidget(d["show"], row, 10, alignment=Qt.AlignmentFlag.AlignCenter)
         self.w[(lt, par)] = d
         if cont_par is not None:
             c = {}
             ccode = f"C{cont_par}"
-            c["best"] = _mono_label("Not Fit", template="-99.9999+9.9999/-9.9999")
-            self.grid.addWidget(c["best"], row, 12)
+            c["best"] = _mono_label("Not Fit", template="99.999+9.9999/-9.9999")
+            self.grid.addWidget(c["best"], row, 11)
             c["image"] = QRadioButton()
             c["image"].setToolTip("Show the continuum at this line as a map")
             self.image_group.addButton(c["image"])
             c["image"].clicked.connect(lambda _=False, cc="IMAGE" + ccode: self.ctl.linefit_action(cc))
-            self.grid.addWidget(c["image"], row, 13, alignment=Qt.AlignmentFlag.AlignCenter)
+            self.grid.addWidget(c["image"], row, 12, alignment=Qt.AlignmentFlag.AlignCenter)
             c["fit"] = QCheckBox()
             c["fit"].setToolTip("Fit the continuum for this lineset")
             c["fit"].clicked.connect(lambda _=False, cc="FIT" + ccode: self.ctl.linefit_action(cc))
-            self.grid.addWidget(c["fit"], row, 14, alignment=Qt.AlignmentFlag.AlignCenter)
+            self.grid.addWidget(c["fit"], row, 13, alignment=Qt.AlignmentFlag.AlignCenter)
             c["show"] = QCheckBox()
             c["show"].setToolTip("Add the continuum to the overplotted components")
             c["show"].clicked.connect(lambda _=False, cc="SHOW" + ccode: self.ctl.linefit_action(cc))
-            self.grid.addWidget(c["show"], row, 15, alignment=Qt.AlignmentFlag.AlignCenter)
+            self.grid.addWidget(c["show"], row, 14, alignment=Qt.AlignmentFlag.AlignCenter)
             self.w[("C", cont_par)] = c
         return row + 1
 
@@ -588,7 +583,7 @@ class LinefitPanels:
             for key in ("start", "min", "max", "fix"):
                 if key in d:
                     d[key].setEnabled(gauss)
-        for j in (3, 5, 6, 7, 8):
+        for j in (3, 4, 5, 6):
             self.col_labels[j].setText(self.COLS[j] if gauss else "")
         self.cb_constr.setVisible(gauss)
         self.lbl_momthresh.setVisible(not gauss)
