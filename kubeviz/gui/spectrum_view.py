@@ -133,7 +133,6 @@ class SpectrumView(QWidget):
         self.zmax_edit.editingFinished.connect(lambda: self._emit_float(self.zmax_edit, self.zmaxChanged))
         row.addWidget(self.zmax_edit)
         self.fix_btn = tool("Fix scale", "Keep the flux axis at the min/max values", self.fixScaleToggled, checkable=True)
-        self.zoom_btn = tool("Zoom panel", "Show / hide the spectral zoom panel", self.zoomToggled)
         tool("Save", "Save the displayed spectrum as FITS", self.saveRequested)
 
         self.range_btn = QToolButton()

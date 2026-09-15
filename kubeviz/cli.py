@@ -39,6 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--lineset", type=int, default=0,
                    help="1 Ha+[NII], 2 [OIII], 3 [OII], 4 Hb, 5 [SII], 6 [OI], 7 [SIII], 8 HeI, 9 Lya (default 0: all)")
     p.add_argument("--debug", action="store_true", help="increase verbosity")
+    p.add_argument("--zoommap", action="store_true", help="show the separate spectral zoom panel")
     p.add_argument("--nproc", type=int, default=1,
                    help="worker processes for FIT ALL / FIT ADJ ALL (default 1 = sequential; 0 = all cores but one, "
                         "at most 8); can be changed in the Fit setup group")

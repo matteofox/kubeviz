@@ -506,11 +506,9 @@ class LinefitPanels:
 
         # ---- Status
         status = QWidget()
-        gv = QVBoxLayout(status)
-        gv.setContentsMargins(6, 2, 6, 2)
-        gv.setSpacing(2)
-        g = QHBoxLayout()
-        gv.addLayout(g)
+        g = QHBoxLayout(status)                # one row: status on the left, progress on the right
+        g.setContentsMargins(6, 2, 6, 2)
+        g.setSpacing(6)
         g.addWidget(QLabel("Errors:"))
         self.lbl_errmethod = QLabel("")
         g.addWidget(self.lbl_errmethod)
@@ -533,14 +531,12 @@ class LinefitPanels:
         self.image_group.addButton(self.rb_flag)
         self.rb_flag.clicked.connect(lambda: self.ctl.linefit_action("IMAGEFLAG"))
         g.addWidget(self.rb_flag)
-        g.addStretch(1)
-        g2 = QHBoxLayout()
-        gv.addLayout(g2)
+        g.addSpacing(10)
         self.lbl_mc = QLabel("")
-        self.lbl_mc.setWordWrap(True)
         self.lbl_mc.setStyleSheet("color: #6b6b6b")
-        g2.addWidget(self.lbl_mc, 1)
-        g = g2
+        self.lbl_mc.setVisible(False)
+        g.addWidget(self.lbl_mc)
+        g.addStretch(1)
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 1000)
         self.progress_bar.setFixedWidth(220)
@@ -716,6 +712,7 @@ class LinefitPanels:
             self.lbl_errmethod.setText(ERR_METHOD_NAMES.get(st.domontecarlo, ""))
             inmap = st.gauss_initmap is not None if gauss else st.mom_windowmap is not None
             self.lbl_mc.setText("Start values from the loaded maps" if inmap else "")
+            self.lbl_mc.setVisible(bool(inmap))
             self.sync_switches()
             self.edit_maxwoffb.setText(f"{st.maxwoffb:.2f}")
             self.edit_maxwoffr.setText(f"{st.maxwoffr:.2f}")

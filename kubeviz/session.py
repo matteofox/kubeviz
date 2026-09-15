@@ -34,7 +34,7 @@ def start_session(datafile: str | None, noisefile=None, ext=None, noise_ext=None
                   lineset=0, debug=False, mask_sn_thresh=None, mask_maxvelerr=None, mom_thresh=None,
                   instr=None, band=None, fix_ratios=False, fittype="gauss", spmask=None, outdir=None,
                   logfile=None, fitpars=None, momwindowfile=None, gaussinitfile=None,
-                  scalenoiseerr=False, resfile=None, scroll=False, nproc=1) -> State:
+                  scalenoiseerr=False, resfile=None, scroll=False, nproc=1, zoommap=False) -> State:
     """Create and initialise a session (headless). Returns the populated State."""
     utils.setup_logging(level=10 if debug else 20, logfile=logfile)
     utils.log.info("")
@@ -59,6 +59,7 @@ def start_session(datafile: str | None, noisefile=None, ext=None, noise_ext=None
     state = State()
     state.debug = bool(debug)
     state.nproc = int(1 if nproc is None else nproc)
+    state.zoommap = bool(zoommap)
     state.cwdir = os.getcwd() + os.sep
     state.outdir = (outdir if outdir else state.cwdir)
     if not state.outdir.endswith(os.sep):
