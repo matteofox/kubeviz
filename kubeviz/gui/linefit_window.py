@@ -544,9 +544,11 @@ class LinefitPanels:
             (("RESET USER PARS", "RESETUSER", "Reset user start values and limits"),
              ("RESET ALL PARS", "RESETALL", "Reset fit, user values and settings")),
         ]   # mask/spaxel and Gauss/moments are toggled from the Fit results header
+        self.action_buttons = []
         for col, items in enumerate(columns):
             for row, (text, code, tip) in enumerate(items):
                 btn = QPushButton(text)
+                self.action_buttons.append(btn)
                 btn.setObjectName("action")
                 btn.setToolTip(tip)
                 btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -554,6 +556,7 @@ class LinefitPanels:
                 grid.addWidget(btn, row, col)
             grid.setColumnStretch(col, 1)
         save = QPushButton("SAVE")
+        self.action_buttons.append(save)
         save.setToolTip("Save the results as FITS")
         save.setObjectName("save")
         save.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -735,6 +738,16 @@ class LinefitPanels:
                     self.cb_second.setChecked(True)
         finally:
             self._building = False
+
+    def set_busy(self, busy: bool) -> None:
+        """Grey out everything that would start another fit or change the setup while a
+        FIT ALL / FIT ADJ ALL loop runs; only Interrupt stays active."""
+        for b in self.action_buttons:
+            b.setEnabled(not busy)
+        for w in (self.table, self.setup_group, self.lbl_type, self.lbl_mode, self.btn_flag,
+                  self.rb_chisq, self.rb_flag):
+            w.setEnabled(not busy)
+        self.interrupt_btn.setEnabled(True)
 
     def set_flag_button(self, flag, fitted: bool = True):
         """OK (green) / BAD (red); a spaxel that was never fitted shows None (grey) while

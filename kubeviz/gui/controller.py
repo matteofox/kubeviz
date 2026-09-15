@@ -135,6 +135,7 @@ class KubevizGUI(QMainWindow):
         self.status_label.setContentsMargins(0, 0, 0, 0)
         sb.addWidget(self.status_label, 1)
         self._cancel_requested = False
+        self._busy = False                 # a FIT ALL / FIT ADJ ALL loop is running
         self._log_handler = _StatusLogHandler(self.status_label)
         utils.log.addHandler(self._log_handler)
 
@@ -507,6 +508,8 @@ class KubevizGUI(QMainWindow):
         return int(np.clip(col, 0, st.Ncol - 1)), int(np.clip(row, 0, st.Nrow - 1))
 
     def on_spaxel_pressed(self, col, row):
+        if self._busy:
+            return
         st = self.state
         st.col, st.row = self._clip_spaxel(col, row)
         self.dragging = 1
@@ -521,6 +524,8 @@ class KubevizGUI(QMainWindow):
             self.plotinfo()
 
     def on_spaxel_dragged(self, col, row):
+        if self._busy:
+            return
         if self.dragging != 1:
             return
         st = self.state
@@ -530,6 +535,8 @@ class KubevizGUI(QMainWindow):
         self.on_spaxel_pressed(c, r)
 
     def on_spaxel_released(self):
+        if self._busy:
+            return
         st = self.state
         self.dragging = 0
         if st.cursormode in (2, 3):
@@ -543,6 +550,8 @@ class KubevizGUI(QMainWindow):
         self.rerender()
 
     def on_slice_changed(self, value):
+        if self._busy:
+            return
         st = self.state
         if value == st.wpix:
             return
@@ -563,9 +572,13 @@ class KubevizGUI(QMainWindow):
             self.update_all(UPDATE_FAST)
 
     def on_spec_clicked(self, x):
+        if self._busy:
+            return
         self._set_wpix_from_wave(x)
 
     def on_zoom_clicked(self, x):
+        if self._busy:
+            return
         self._set_wpix_from_wave(x)
 
     def _set_zmin_spec(self, v):
@@ -613,6 +626,8 @@ class KubevizGUI(QMainWindow):
     # ================================================================== keyboard
     def keyboard(self, ev, source: str):
         """Port of ``kubeviz_keyboard_handler`` plus the window-specific keys."""
+        if self._busy:
+            return
         st = self.state
         key = ev.key()
         text = ev.text()
@@ -744,7 +759,13 @@ class KubevizGUI(QMainWindow):
         import time
         st = self.state
         lf = self.linefit
+        if self._busy:                     # a click that slipped through while a loop runs
+            return None
+        self._busy = True
         self._cancel_requested = False
+        lf.set_busy(True)
+        self.spax.setEnabled(False)
+        self.menuBar().setEnabled(False)
         lf.progress_bar.setValue(0)
         lf.progress_bar.setFormat(f"{title} %p%")
         lf.progress_bar.setVisible(True)
@@ -776,6 +797,10 @@ class KubevizGUI(QMainWindow):
         try:
             result = func(should_cancel, progress, on_fit)
         finally:
+            self._busy = False
+            lf.set_busy(False)
+            self.spax.setEnabled(True)
+            self.menuBar().setEnabled(True)
             lf.progress_bar.setVisible(False)
             lf.interrupt_btn.setVisible(False)
             if self._cancel_requested:
@@ -793,6 +818,8 @@ class KubevizGUI(QMainWindow):
     # ================================================================== linefit window actions
     def linefit_action(self, code: str, value=None):
         """Port of ``kubeviz_linefit_event`` (button and text events)."""
+        if self._busy:
+            return
         st = self.state
         lf = self.linefit
         # ------------------------------------------------------------ text fields
@@ -1003,6 +1030,8 @@ class KubevizGUI(QMainWindow):
 
     # ================================================================== menu actions (kubeviz_spax_event BUTT)
     def menu_action(self, code: str):
+        if self._busy and code != "Quit":
+            return
         st = self.state
         update = UPDATE_FULL
         if code == "Quit":
