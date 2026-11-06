@@ -1,66 +1,126 @@
 # kubeviz
 
-Interactive visualisation and emission-line fitting of IFU datacubes.
+Interactive visualisation and emission-line fitting of integral-field spectroscopy (IFU)
+datacubes, in Python.
 
-This repository contains two implementations:
+kubeviz shows a FITS datacube (x, y, wavelength) in an interactive viewer and fits emission
+lines spaxel by spaxel, or over spaxel masks you draw, with Gaussian profiles or moments. It
+estimates uncertainties from the noise cube, bootstrap cubes or Monte Carlo realisations,
+flags the fits by quality, and writes the results as FITS maps. Everything the GUI does can
+also run without it, from the command line or from Python.
 
-* **`kubeviz/` (Python 3)** - the current version: numpy / scipy / astropy engine, PyQt6 +
-  pyqtgraph GUI, batch mode. Results files are interchangeable with the IDL version.
-* **`kubeviz.pro` (IDL, V2.2)** - the original program, unchanged, with its `addons/`,
-  `templates/` and `doc/` directories. The IDL instructions follow below.
+The original IDL implementation (V2.2) is kept in [`idl/`](idl/README.md). Results files
+have the same layout in both versions and can be exchanged.
 
-**IDL users: nothing changes for you.** `kubeviz.pro`, `addons/`, `templates/` and `doc/` are
-exactly as before and stay at the root of the repository, so an existing `IDL_PATH` pointing
-here keeps working. The last IDL-only state of the repository is tagged `idl-v2.2`
-(`git checkout idl-v2.2`). The Python port lives in its own package directory and does not
-touch the IDL files; results files written by either version are readable by the other.
+## Features
 
-## Python quick start
+**Data input**
+* Instruments recognised from the header: MUSE, KMOS (including KMOS3D data products),
+  SINFONI, VIMOS, SAMI and WiFeS. Any other cube with a standard spectral WCS can be read by
+  giving the data and noise extensions.
+* Noise from an extension of the same file or from a separate file; air or vacuum and
+  linear or logarithmic wavelength solutions.
+* Load a sub-cube with `--trim '[x1:x2,y1:y2,z1:z2]'` (1-based, IRAF / ds9 convention);
+  spatial and spectral smoothing kernels.
+
+**Visualisation**
+* Images of a single slice or combined over one or two wavelength ranges: sum, median,
+  inverse-variance weighted average or median, median-subtracted slice and the difference
+  of the two ranges.
+* Data, noise, bad-pixel and S/N cubes, and maps of every fitted quantity with their
+  errors and S/N. Spaxels that were never fitted are left blank.
+* Continuous zoom and pan. Intensity scalings HistEq, Zscale, MinMax, percentiles and user
+  linear, sqrt or log cuts. An interactive colour bar labelled with the displayed quantity
+  sets the cuts by dragging its handles.
+* RA / Dec of the current spaxel, 2D Gaussian fit to the displayed image, FITS header viewer.
+* Spectrum panel with zoom and pan, the fitted components overplotted, and the continuum
+  windows marked.
+
+**Spectra and masks**
+* Spectrum of a single spaxel, or of a mask as sum, median, weighted average,
+  median-subtracted or optimal extraction (Robertson 1986).
+* Any number of spaxel masks, painted with the mouse or built automatically from the
+  spaxels above S/N 5 in the displayed image; masks are saved and loaded as FITS.
+
+**Line fitting**
+* 17 lines in 9 linesets: Hα + [NII], [OIII], [OII], Hβ, [SII], [OI], [SIII], HeI and Lyα.
+  The lines of a set share their kinematics; the kinematics of the other sets are fixed to
+  the first one fitted.
+* Optional second kinematic component, identified as the fainter, the more offset or the
+  broader one, with a "smart" mode that keeps it only when two components are really present.
+* [NII], [OIII] and [OI] doublet ratios can be tied (Storey & Zeippen 2000). Start values,
+  limits and fixed parameters per line; start values can also be read per spaxel from maps.
+* Continuum from two side bands (percentile clipping and a polynomial), or a constant fitted
+  together with the lines.
+* Instrumental resolution from the sky lines in the variance spectrum, from the KMOS
+  calibration polynomials of the nearest epoch, from the header or the MUSE manual, or from
+  spectral templates.
+* Moments (flux, velocity, dispersion) as an alternative to Gaussian fits.
+
+**Uncertainties and quality**
+* Errors from the noise cube (optionally rescaled by the reduced χ²), from bootstrap cubes or
+  from three Monte Carlo schemes. The parameter distributions can be saved as plots and tables.
+* Automatic OK / BAD flags from S/N and velocity-error thresholds, manual flagging, and
+  FIT ADJ ALL, which refits bad spaxels from the solutions of their good neighbours.
+
+**Throughput and automation**
+* FIT ALL and FIT ADJ ALL on parallel worker processes (`--nproc`), with a progress bar and
+  an Interrupt button.
+* Batch mode without GUI, and a Python API for scripted analyses.
+* Results as FITS cubes with one plane per parameter, error and flag, described in the
+  header; sessions saved and reopened as `.kvz` files; spectra, images and cubes exported to
+  FITS. IDL `.sav` sessions can be opened read-only.
+* `kubeviz-compare` compares two results files plane by plane.
+
+## Installation
+
+kubeviz needs Python 3.10 or newer. The engine depends on numpy, scipy and astropy; the GUI
+adds PyQt6 and pyqtgraph. A dedicated conda or virtual environment is recommended.
 
 ```bash
-pip install -e .            # engine only (numpy, scipy, astropy)
-pip install -e ".[gui]"     # plus PyQt6 and pyqtgraph for the GUI
-python -m pytest            # run the test-suite on synthetic cubes
+git clone https://github.com/matteofox/kubeviz.git
+cd kubeviz
+pip install ".[gui]"          # or: pip install .  for the engine and batch mode only
 ```
 
-If the parent directory of this repository is on your `PYTHONPATH` (for example
-`export PYTHONPATH=$PYTHONPATH:~/Software`), the repository folder shadows the package
-as an empty namespace package and `kubeviz` fails with "cannot import name
-`__version__` from 'kubeviz' (unknown location)". Install in compat editable mode instead:
+For development, install in editable mode with the test dependencies:
 
 ```bash
-pip install -e ".[gui]" --config-settings editable_mode=compat
+pip install -e ".[gui,test]"
 ```
 
-Batch mode (fit every spaxel of a cube, write the results FITS and a session file):
+If the directory that contains this repository is on your `PYTHONPATH` (for example
+`~/Software`), the repository folder hides the package and `kubeviz` fails with "cannot
+import name `__version__` from 'kubeviz' (unknown location)". Install in compat editable
+mode instead:
 
 ```bash
-kubeviz cube.fits --redshift 0.85 --lineset 1 --batch --fit-all-lines --outdir results/
+pip install -e ".[gui,test]" --config-settings editable_mode=compat
 ```
 
-Interactive session (spaxel viewer with an interactive colour bar, spectrum, spectral zoom,
-fit controls and line-parameter table as dockable panels):
+## Quick start
 
 ```bash
-kubeviz cube.fits --redshift 0.85 --lineset 1
-kubeviz                       # file dialog
-kubeviz session.kvz           # reopen a saved session
+kubeviz --demo                                  # synthetic cube, to try the interface
+kubeviz cube.fits --redshift 0.85 --lineset 1   # interactive session
+kubeviz session.kvz                             # reopen a saved session
+kubeviz --help                                  # all command line options
 ```
 
-Mouse in the spaxel viewer: left click/drag moves the crosshair or paints the mask, right
-drag changes contrast, wheel zooms, middle drag (or shift + left drag) pans. Keyboard
-shortcuts are listed under Help -> Keyboard shortcuts, the full manual under Help ->
-Instructions.
+In the viewer, a left click moves the crosshair and shows that spaxel's spectrum, the wheel
+zooms and a right drag changes the contrast. Check the redshift and the instrumental
+resolution in the Line fitting panel, tick the lines to fit, then press FIT for the current
+spaxel or FIT ALL for the whole field. Help → Instructions in the program describes every
+control, and Help → Keyboard shortcuts lists the keys.
 
-Every option is a command line flag (`kubeviz --help`). FIT ALL and FIT ADJ ALL can use
-forked worker processes: `--nproc N` (default 1 = sequential; 0 = all cores but one, at most
-8), also adjustable in the Fit setup group. `kubeviz --demo` generates a synthetic cube and
-opens it. `kubeviz-compare a_res.fits b_res.fits` compares two results files plane by plane.
-Results files use the same plane layout and header keywords as the IDL version, so they can
-be exchanged between the two implementations; IDL `.sav` sessions can be opened read-only.
-Python sessions are saved as `.kvz` files.
+Batch mode fits every spaxel (or every mask given with `--spmask`) and writes the results
+and a session file:
 
-From Python:
+```bash
+kubeviz cube.fits --redshift 0.85 --lineset 1 --batch --fit-all-lines --nproc 8 --outdir results/
+```
+
+## Using kubeviz from Python
 
 ```python
 from kubeviz.session import start_session
@@ -72,108 +132,48 @@ from kubeviz.io.results import saveres
 state = start_session("cube.fits", redshift=0.85, lineset=1)
 state.pndofit[:state.Nlines] = 1      # fit the narrow component of every line in the set
 state.pcdofit[:state.Nlines] = 1      # and the continuum
-fitall(state)                          # or dofit(state) for the current spaxel (state.col/row)
+fitall(state, nproc=4)                 # or dofit(state) for the current spaxel (state.col/row)
 autoflag(state)
 saveres(state, "cube_res.fits")
 res = state.res                        # ResultSet: res.n[row, col] = [flag, dv, sigma, fluxes...]
 ```
 
----
+## Contributing
 
-# IDL version (V2.2) - original README
+Contributions are welcome as pull requests. Please run the test suite before submitting;
+it uses small synthetic cubes and runs the GUI tests offscreen:
 
-Acknowledgements:
+```bash
+python -m pytest
+```
 
-If you use KUBEVIZ in your work please add the following sentence in the ackowledgement section of any resulting publication:
+Add your name to the contributors list below in your first pull request.
 
-This work made use of the KUBEVIZ software which is publicly available at https://github.com/matteofox/kubeviz/.
-The developement of the KUBEVIZ code code was supported by the Deutsche Forschungsgemeinschaft via Project IDs: 
-WI3871/1-1 and WI3871/1-2
+## Credits
 
-And please cite Fossati et al. (2016) http://adsabs.harvard.edu/abs/2016MNRAS.455.2028F.
+kubeviz is developed by
 
-*****************
+* Matteo Fossati
+* David J. Wilman
 
-Setting up kubeviz (V2.0)
+Contributors:
 
-1. Setup appropriate directory structure to store kubeviz versions
-   outside IDL_PATH 
+* *(add your name with your first pull request)*
 
-   mkdir kubeviz
+The original IDL kubeviz was written by David J. Wilman, Matteo Fossati and Joris Gerssen,
+based on cubeviz by Joris Gerssen.
 
-2. Unpack the gzipped tarfile in the directory you have created:
+## Citing kubeviz
 
-   cd kubeviz
-   tar xvfz kubeviz_v2.0.tar.gz
+If you use kubeviz in your work, please add the following sentence to the acknowledgements
+of the resulting publications:
 
-3. This creates a subdirectory with the specific version number 
-   e.g. kubeviz/v2.0 Now link the current version inside IDL_PATH (assumed
-   IDL root directory $IDL_ROOT):
+> This work made use of the KUBEVIZ software which is publicly available at
+> https://github.com/matteofox/kubeviz/. The development of the KUBEVIZ code was supported by
+> the Deutsche Forschungsgemeinschaft via Project IDs WI3871/1-1 and WI3871/1-2.
 
-   ln -s kubeviz/v2.0 $IDL_ROOT/kubeviz_current
-   
-   Make sure your IDL_PATH runs recusrsively into the subdirectories 
-   (addons/ must be in the IDL_PATH).
-   
-3. Run kubeviz!
+and cite [Fossati et al. (2016), MNRAS 455, 2028](http://adsabs.harvard.edu/abs/2016MNRAS.455.2028F).
 
-   idl
-   > kubeviz, 'cube.fits'
+## License
 
-4. Documentation
-   
-   The doc/ directory of the package includes an instruction file
-   and a detailed changelog. We suggest you to have a quick look 
-   at the instructions.txt file before using the code. This describes
-   the calling sequence and the features of the interactive environment.
-   
-   From the IDL prompt run:
-   > doc_library, 'kubeviz'
-   to see the header of the code and the available keywords.
-
-   In the GUI, select 
-      'help' -> 'Instructions' 
-      'help' -> 'What's new' 
-   to see the documentation.   
-   
-
-!! IMPORTANT !!
-  
-   Kubeviz requires the following external libraries:
-   * Astrolib Library (updated after 2012, or late 2014 if you load MUSE cubes)
-         http://idlastro.gsfc.nasa.gov/contents.html
-   * Some routines in the astrolib make use of programs in the Coyote Library. 
-     Although they have recently bundled into the astrolib package it is 
-     recommended to have a full and up-to-date  installation of the Coyote 
-     library which must be downloaded separately.
-   * Mpfit suite of code (V1.70 or greater)
-         http://cow.physics.wisc.edu/~craigm/idl/fitting.html
-
-   If kubeviz does not work properly and stops when calling one of those 
-   third-party libraries, the first thing to do is to update the library. 
-   Then restart IDL and try again.
-
-(BASIC) TROUBLESHOOTING
-
-1) If you see this message:
-    
-    [WARNING] ##       This is a 32 bit IDL version.        ##
-    [WARNING] ##   Some features might now work correctly!  ##
-   
-   There is no reason to worry unless you are trying to load a very large 
-   datacube. Almost certainly MUSE datacubes require a 64bit IDL version 
-   for the load to be successful.
-
-2) If you see errors like:
-      
-      % Error occurred at: VALID_NUM   line 71     
-      % AIRTOVAC: Incorrect number of arguments.
-   
-   It means you have not updated the Astrolib library since 2012. 
-   It is important to keep Astrolib updated frequently as bugs 
-   are fixed and the library is gradually being converted to handle 
-   64bit variables whenever possible. 
-
-3) If you get an error when you try to load data from an instrument 
-   which is not in the list of supported instrument please report it 
-   to mfossati at mpe.mpg.de. We will try to solve the issue.
+kubeviz is distributed under the GNU General Public License v3 or later (see `LICENSE`).
