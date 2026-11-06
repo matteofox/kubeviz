@@ -169,8 +169,7 @@ If you use kubeviz in your work, please add the following sentence to the acknow
 of the resulting publications:
 
 > This work made use of the KUBEVIZ software which is publicly available at
-> https://github.com/matteofox/kubeviz/. The development of the KUBEVIZ code was supported by
-> the Deutsche Forschungsgemeinschaft via Project IDs WI3871/1-1 and WI3871/1-2.
+> https://github.com/matteofox/kubeviz/.
 
 and cite [Fossati et al. (2016), MNRAS 455, 2028](http://adsabs.harvard.edu/abs/2016MNRAS.455.2028F).
 
