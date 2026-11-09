@@ -11,6 +11,7 @@ from __future__ import annotations
 import numpy as np
 from astropy.io import fits
 from scipy.optimize import least_squares
+from regions import Regions
 
 from .. import utils
 from ..constants import MODE_MASK, SPEC_SUM
@@ -72,7 +73,58 @@ def load_mask(state, fname: str) -> None:
     state.specmode = SPEC_SUM
     state.cursormode = 2
     medianspec(state)
+    
 
+def load_binmap(state, fname: str) -> None:
+    """Load a 2-D .fits or .csv binmap as a series of masks (OVERWRITES the current masks) and switch to mask mode. 2-D binmaps should have all pixels in each bin as an integer starting with 0. Unbinned pixels should be a negative number or nan."""
+    utils.info(f"Reading binmap file to masks: {fname}")
+    if fname.split(".")[-1] == "fits":
+        m = np.asarray(fits.getdata(fname), dtype=float)
+    elif fname.split(".")[-1] == "csv":
+        m = np.array(np.loadtxt(fname), dtype=float)
+    if m.ndim == 2:
+        m = m[None]
+    else:
+        raise ValueError(f"Only 2-D binmaps are supported.")
+    if m.shape[1:] != (state.Nrow, state.Ncol):
+        raise ValueError(f"Mask shape {m.shape[1:]} does not match the cube {(state.Nrow, state.Ncol)}")
+    binnum=0.0
+    m1 = np.zeros((int(np.nanmax(m)), m.shape[1], m.shape[2]))
+    while binnum < np.nanmax(m):
+        m1[int(binnum)] = np.where(m == binnum, 1, 0)
+        binnum += 1
+    state.spaxselect = m1
+    state.Nmask = m1.shape[0]
+    state.imask = 1
+    state.linefit_mode = MODE_MASK    
+    state.specmode = SPEC_SUM
+    state.cursormode = 2
+    medianspec(state)
+
+
+def load_region(state, fname: str) -> None:
+    """Load a .reg region file as a series of masks (OVERWRITES the current masks) and switch to mask mode. Regions should be saved in image coordinates."""
+    utils.info(f"Reading region file to masks: {fname}")
+    try:
+        regs=Regions.read(fname)
+    except:
+        raise ValueError(f"Regions must be saved in image coordinates.")
+    m1 = np.zeros((len(regs), state.Nrow, state.Ncol))
+    regnum=0
+    for reg in regs:
+        rm=reg.to_mask()
+        m=rm.to_image((state.Nrow, state.Ncol))
+        if m.shape != (state.Nrow, state.Ncol):
+            raise ValueError(f"Mask shape {m.shape} does not match the cube {(state.Nrow, state.Ncol)}")
+        m1[regnum]=m
+        regnum += 1
+    state.spaxselect = m1
+    state.Nmask = m1.shape[0]
+    state.imask = 1
+    state.linefit_mode = MODE_MASK    
+    state.specmode = SPEC_SUM
+    state.cursormode = 2
+    medianspec(state)
 
 def select_spaxels(state, col: int, row: int, value: int = 1) -> None:
     """Select (``value=1``) or deselect (``value=0``) spaxels around ``(col,row)`` in

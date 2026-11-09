@@ -9,7 +9,8 @@ import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtWidgets import (QApplication, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
                              QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QProgressBar,
-                             QPushButton, QRadioButton, QSpinBox, QVBoxLayout)
+                             QPushButton, QRadioButton, QSpinBox, QVBoxLayout, QFileDialog)
+from regions import Regions
 
 from .. import __version__
 
@@ -69,6 +70,9 @@ class FitallRangeDialog(QDialog):
         form.addRow("Y range (min/max):", yr)
         form.addRow("Niter FITADJ (0 = until no improvement):", self.nloop)
         lay.addLayout(form)
+        reg = QPushButton("Set range from regions file")
+        reg.clicked.connect(self._region)
+        lay.addWidget(reg)
         row = QHBoxLayout()
         apply = QPushButton("Apply")
         default = QPushButton("Defaults")
@@ -97,6 +101,27 @@ class FitallRangeDialog(QDialog):
         self.result_nloop = self.nloop.value()
         self.accept()
 
+    def _region(self):
+        fname, _ = QFileDialog.getOpenFileName(self, "Load pixel region", "region (*.reg)")
+        regs=Regions.read(fname)
+        
+        xminarr=np.zeros(len(regs))
+        xmaxarr=np.zeros(len(regs))
+        yminarr=np.zeros(len(regs))
+        ymaxarr=np.zeros(len(regs))
+        num=0
+        for reg in regs:
+            try:
+                box=reg.bounding_box
+            except:
+                raise ValueError(f"Regions must be in image coordinates.")
+                return
+            xminarr[num], xmaxarr[num], yminarr[num], ymaxarr[num] = box.ixmin, box.ixmax, box.iymin, box.iymax
+            num += 1
+        self.xmin.setValue(int(xminarr.min()))
+        self.xmax.setValue(int(xmaxarr.max()))
+        self.ymin.setValue(int(yminarr.min()))
+        self.ymax.setValue(int(ymaxarr.max()))
 
 class GotoMaskDialog(QDialog):
     def __init__(self, imask: int, nmask: int, parent=None):

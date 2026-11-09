@@ -154,7 +154,8 @@ def instrres_init(state) -> None:
     if instr == "muse":
         if np.sum(state.instrres_extpoly) == 0:
             utils.info("Instrumental resolution obtained from the MUSE manual (Figure 11)")
-        state.instrres_extpoly[:5] = [499.446, -0.201608, 0.000130290, -7.87479e-09, 0.0]
+        #state.instrres_extpoly[:5] = [499.446, -0.201608, 0.000130290, -7.87479e-09, 0.0]
+        state.instrres_extpoly[:5] = [3.32338754e+03, -1.46784920, 3.12869916e-04, -1.64479615e-08, 0.0] #updated instrres_extpoly, previous line is the original
         state.instrres_mode = INSTRRES_EXTPOLY
         return
 

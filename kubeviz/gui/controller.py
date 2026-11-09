@@ -22,7 +22,7 @@ from ..constants import (CUBE_BADPIX, CUBE_DATA, CUBE_LINEFIT, CUBE_LINEFIT_ERR,
                          CUBE_NOISE, CUBE_SN, ERR_BOOTSTRAP, ERR_MC1, ERR_MC2, ERR_MC3, ERR_NOISE,
                          FIT_GAUSS, FIT_MOMENTS, IMG_MED1_MINUS_MED2, IMG_MED2_MINUS_MED1, IMG_MEDSUB1,
                          IMG_MEDSUB2, IMG_SLICE, MODE_MASK, MODE_SPAXEL, NOT_FIT, SPEC_MEDSUB,
-                         SPEC_SLICE, SPEC_SUM)
+                         SPEC_SLICE, SPEC_SUM, FIT_STD, FIT_BINNED, FIT_LOCAL, FIT_GLOBAL)
 from ..core import masks as masks_mod
 from ..core.display import (CUBESEL_NAMES, IMGMODE_NAMES, current_image, current_value,
                             linefit_image_reset, linefit_image_update, toggle_flag)
@@ -70,7 +70,7 @@ def open_cube_interactively(args: dict):
                                                        "FITS files (*.fits *.fits.gz *.fit);;All files (*)")
             if not noisefile:
                 return None
-    kwargs = {k: v for k, v in args.items() if k not in ("datafile", "batch", "fit_all_lines", "noisefile")}
+    kwargs = {k: v for k, v in args.items() if k not in ("datafile", "batch", "fit_all_lines", "noisefile","demo")}
     try:
         return start_session(fname, noisefile=noisefile, **kwargs)
     except Exception as exc:  # pragma: no cover - interactive path
@@ -232,7 +232,7 @@ class KubevizGUI(QMainWindow):
                                     ("Save Cube as FITS...", "SaveCube"), ("Display FITS Header", "DisplayHeader"),
                                     ("Save Session...", "SaveSession"), ("Load Session...", "LoadSession"), None, ("Quit", "Quit")])
         self._add_menu(mb, "Spax.Masks", [("Select", "Select"), ("Deselect", "Deselect"), ("Clear", "Clear"), ("Optimal Mask", "OptimalMask"), None,
-                                          ("New Mask", "NewMask"), ("Save...", "SAVE"), ("Load...", "Load"), ("Delete Mask", "DeleteMask"), None,
+                                          ("New Mask", "NewMask"), ("Save...", "SAVE"), ("Load...", "Load"), ("Load Binmap...", "LoadBinmap"), ("Load Region...", "LoadRegion"), ("Delete Mask", "DeleteMask"), None,
                                           ("Go to Mask...", "GoToMask"), ("Previous Mask", "PrevMask"), ("Next Mask", "NextMask"), None,
                                           ("Mask Parameters...", "MaskPars")])
         self.err_group = QActionGroup(self)
@@ -966,6 +966,14 @@ class KubevizGUI(QMainWindow):
             st.linefit_type = FIT_MOMENTS if st.linefit_type == FIT_GAUSS else FIT_GAUSS
             lf.typeswitch()
             self.update_all(UPDATE_FULL)
+        elif code == "MODEL":
+            st.linefit_model = FIT_BINNED if st.linefit_model == FIT_STD else FIT_STD
+            lf.typeswitch()
+            self.update_all(UPDATE_FULL)
+        elif code == "METHOD":
+            st.linefit_method = FIT_GLOBAL if st.linefit_method == FIT_LOCAL else FIT_LOCAL
+            lf.typeswitch()
+            self.update_all(UPDATE_FULL)
         elif code == "FITCONSTRAINTS":
             st.fitconstr = not st.fitconstr
         elif code == "FIXRATIOS":
@@ -1142,6 +1150,26 @@ class KubevizGUI(QMainWindow):
                 return
             try:
                 masks_mod.load_mask(st, fname)
+            except Exception as exc:
+                QMessageBox.critical(self, "kubeviz", str(exc))
+                return
+            update = UPDATE_FAST
+        elif code == "LoadBinmap":
+            fname, _ = QFileDialog.getOpenFileName(self, "Load mask", st.cwdir, "BINMAP (*.fits *.csv)")
+            if not fname:
+                return
+            try:
+                masks_mod.load_binmap(st, fname)
+            except Exception as exc:
+                QMessageBox.critical(self, "kubeviz", str(exc))
+                return
+            update = UPDATE_FAST
+        elif code == "LoadRegion":
+            fname, _ = QFileDialog.getOpenFileName(self, "Load region", st.cwdir, "region (*.reg)")
+            if not fname:
+                return
+            try:
+                masks_mod.load_region(st, fname)
             except Exception as exc:
                 QMessageBox.critical(self, "kubeviz", str(exc))
                 return

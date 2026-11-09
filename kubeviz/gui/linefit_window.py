@@ -23,8 +23,8 @@ from PyQt6.QtWidgets import (QButtonGroup, QCheckBox, QFrame, QGridLayout, QHBox
 
 from .. import utils
 from .qtenv import APP_FONT_POINTS
-from ..constants import (CKMS, ERR_METHOD_NAMES, ERR_NOISE, FIT_GAUSS, INSTRRES_EXTPOLY, INSTRRES_TEMPLATE,
-                         INSTRRES_VARPOLY, MODE_SPAXEL, NOT_FIT)
+from ..constants import (CKMS, ERR_METHOD_NAMES, ERR_NOISE, FIT_GAUSS, FIT_STD, INSTRRES_EXTPOLY, INSTRRES_TEMPLATE,
+                         INSTRRES_VARPOLY, MODE_SPAXEL, NOT_FIT, FIT_LOCAL) 
 
 PANEL_STYLE = """
 QLineEdit { padding: 1px 3px; }
@@ -167,6 +167,18 @@ class LinefitPanels:
         self.lbl_type.clicked.connect(lambda: self.ctl.linefit_action("TYPE"))
         hdr.addWidget(QLabel("Fit type"))
         hdr.addWidget(self.lbl_type)
+        hdr.addSpacing(14)
+        self.lbl_method = QPushButton("LOCAL")
+        self.lbl_method.setStyleSheet("font-weight: bold")
+        self.lbl_method.setToolTip("Fit method: click to switch between local least squares fitting (trf) and global dual annealing fitting (with SLSQP minimizer) )")
+        self.lbl_method.clicked.connect(lambda: self.ctl.linefit_action("METHOD"))
+        hdr.addWidget(self.lbl_method)
+        hdr.addSpacing(14)
+        self.lbl_model = QPushButton("STANDARD")
+        self.lbl_model.setStyleSheet("font-weight: bold")
+        self.lbl_model.setToolTip("Fit model: click to switch between standard Gaussian and Binned Antiderivative models")
+        self.lbl_model.clicked.connect(lambda: self.ctl.linefit_action("MODEL"))
+        hdr.addWidget(self.lbl_model)
         hdr.addSpacing(14)
         hdr.addWidget(QLabel("z ="))
         self.edit_z = _edit(90, f"{st.redshift:.6f}", "Redshift used to place the lines (Enter to apply; resets the fits)")
@@ -621,7 +633,18 @@ class LinefitPanels:
     def typeswitch(self):
         st = self.state
         gauss = st.linefit_type == FIT_GAUSS
+        model= st.linefit_model == FIT_STD
+        method = st.linefit_method == FIT_LOCAL
         self.lbl_type.setText("GAUSS" if gauss else "MOMENTS")
+        if gauss:
+            self.lbl_model.setText("STANDARD" if model else "BINNED")
+            self.lbl_method.setText("LOCAL" if method else "GLOBAL")
+            self.lbl_model.setVisible(True)
+            self.lbl_method.setVisible(True)
+        else:
+            self.lbl_model.setText("STANDARD")
+            self.lbl_method.setVisible(False)
+            self.lbl_model.setVisible(False)
         first, second = {0: ("1st", "2nd"), 1: ("blue", "red"), 2: ("narrow", "broad")}[int(st.secondcomp_mode)]
         for (lt, par), d in self.w.items():
             if lt == "N":
@@ -789,7 +812,7 @@ class LinefitPanels:
         for b in self.action_buttons:
             b.setEnabled(not busy)
         for w in (self.table, self.setup_group, self.lbl_type, self.lbl_mode, self.btn_flag,
-                  self.rb_chisq, self.rb_flag):
+                  self.rb_chisq, self.rb_flag, self.lbl_model, self.lbl_method):
             w.setEnabled(not busy)
         self.interrupt_btn.setEnabled(True)
 

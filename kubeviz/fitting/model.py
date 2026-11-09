@@ -84,3 +84,43 @@ def ngaussmodel(x, a, spec: ModelSpec):
         fx += _components(x, np.asarray(spec.blines, dtype=float), a[s], a[s + 1],
                           a[s + 2: s + 2 + len(spec.blines)], spec.instrres)
     return fx
+
+
+def _binnedcomponents(x, lam0, dv, sigv, norms, instrres):
+    """Sum of the Gaussians in binned antiderivative form of one kinematic component, all lines evaluated at once.
+
+    ``lam0`` and ``norms`` are arrays over the lines of the set; the instrumental
+    resolution is evaluated for all line centres in a single call.
+    """
+    from scipy.special import erf
+    xcen = lam0 * (1.0 + dv / CKMS)
+    width = lam0 * (sigv / CKMS)
+    deltax= (np.max(x)-np.min(x))/(len(x))
+    R = np.asarray(instrres(xcen), dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        instr_A = np.where(R > 0, xcen / (SIGTOFWHM * R), 0.0)
+    totw2 = width ** 2 + instr_A ** 2
+    ok = totw2 > 0                                # a line with zero total width contributes nothing
+    if not np.any(ok):
+        return np.zeros(x.shape)
+    xcen, totw2, norms = xcen[ok], totw2[ok], norms[ok]
+    amp = norms/2
+    def arg(x):
+         return (x[None, :] - xcen[:, None]) / np.sqrt(2.0 * totw2[:, None])
+    return (amp @ (erf(arg(x+deltax/2))-erf(arg(x-deltax/2))))/deltax
+
+
+def nbinnedmodel(x, a, spec: ModelSpec):
+    """Evaluate the binned model for parameters ``a`` at wavelengths ``x``."""
+    x = np.asarray(x, dtype=float)
+    a = np.asarray(a, dtype=float)
+    fx = np.full(x.shape, a[spec.cpar], dtype=float)
+    if spec.nparstart >= 0 and len(spec.nlines):
+        s = spec.nparstart
+        fx += _binnedcomponents(x, np.asarray(spec.nlines, dtype=float), a[s], a[s + 1],
+                          a[s + 2: s + 2 + len(spec.nlines)], spec.instrres)
+    if spec.bparstart >= 0 and len(spec.blines):
+        s = spec.bparstart
+        fx += _binnedcomponents(x, np.asarray(spec.blines, dtype=float), a[s], a[s + 1],
+                          a[s + 2: s + 2 + len(spec.blines)], spec.instrres)
+    return fx

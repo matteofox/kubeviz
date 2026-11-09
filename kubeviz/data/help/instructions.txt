@@ -43,8 +43,7 @@ Options (all optional):
   --use-mc-noise       use the noise cube derived from the Monte Carlo cubes
   --scalenoiseerr      rescale the noise-cube errors by sqrt(chi2/dof)
   --lineset N          fit one lineset only (default: all lines in the spectral range)
-                       1 Ha+[NII]  2 [OIII]  3 [OII]  4 Hb  5 [SII]  6 [OI]  7 [SIII]
-                       8 HeI  9 Lya
+                       1 Ha+[NII]  2 Hb  3 [OIII]  4 [SII]  5 [OI]  6 [SIII]  7 HeI  8 Lya
   --fix-ratios         tie the [NII], [OIII] and [OI] doublet ratios (Storey & Zeippen 2000)
   --fittype gauss|moments
   --fitpars a,b,c,d,e,f[,g,h]
@@ -212,15 +211,12 @@ Buttons (current spaxel / mask on the top row, all spaxels / masks below):
 The fit is done in linesets, sets of lines fitted simultaneously with common
 kinematics; the kinematics of the following linesets are fixed to those of the first
 one fitted. The continuum is estimated per lineset.
-  1  Ha (6563) + [NII] (6548, 6583)    main line Ha
-  2  [OIII] (4959, 5007)               main line [OIII] 5007
-  3  [OII] (3726, 3729)                main line [OII] 3729
-  4  Hb (4861)                         main line Hb
-  5  [SII] (6716, 6731)                main line [SII] 6731
-  6  [OI] (6300, 6364)                 main line [OI] 6300
-  7  [SIII] (9069, 9531)               main line [SIII] 9069
-  8  HeI (5876, 6678)                  main line HeI 5876
-  9  Lya (1216)                        main line Lya
+  1  Ha (6563) + [NII] (6548, 6584)    main line Ha
+  2  Hb (4861)                         main line Hb
+  3  [OIII] (4959, 5007)               main line [OIII] 5007
+  4  [SII] (6716, 6731)                main line [SII] 6731
+  5  [OI] (6300, 6364)                 main line [OI] 6364
+  6  [SIII]      7  HeI      8  Lya (1216)
 Without --lineset all lines that fall in the spectral range at the given redshift are
 available. The redshift can also be set interactively: select a wavelength and press
 "z" in the spectrum panel; the selected line is taken to be the main line of the

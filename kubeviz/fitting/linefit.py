@@ -16,14 +16,14 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .. import utils
-from ..constants import CKMS, ERR_NOISE, FIT_GAUSS, MODE_SPAXEL, NOT_FIT, SPEC_MEDSUB, SPEC_SLICE
+from ..constants import CKMS, ERR_NOISE, FIT_GAUSS, MODE_SPAXEL, NOT_FIT, SPEC_MEDSUB, SPEC_SLICE, FIT_STD, FIT_LOCAL
 from ..core.extraction import medianspec, spectrum_for_fit
 from ..linesdb import (FIXED_RATIOS, LINEFANCYNAMES, LINENAMES, LINES_REST, LINESET_MAX,
                        LINESETS, airtovac)
 from .continuum import definecontinuumfitregion, fitcontinuum, getcontatlambda
-from .model import ModelSpec, ngaussmodel
+from .model import ModelSpec, ngaussmodel, nbinnedmodel
 from .moments import linefit_moments
-from .mpfit import ParInfo, mpcurvefit
+from .mpfit import ParInfo, mpcurvefit, mpcurvefitglobal
 
 
 # ============================================================================== context
@@ -451,7 +451,15 @@ def linefit_fit(state, ctx: FitContext, wave, spec, weights, gpars, savepars=Fal
     """Run mpcurvefit on one spectrum. Returns the best-fit parameter vector
     (all NOT_FIT on failure)."""
     spec_model = ctx.model_spec(state)
-    res = mpcurvefit(ngaussmodel, wave, spec, weights, gpars, parinfo=ctx.parinfo, itmax=200,
+    fit_model= state.linefit_model == FIT_STD
+    fit_method = state.linefit_method == FIT_LOCAL
+    if fit_method:
+        res = mpcurvefit(ngaussmodel if fit_model else nbinnedmodel, wave, 
+                     spec, weights, gpars, parinfo=ctx.parinfo, itmax=200,
+                     quiet=not state.debug, spec=spec_model)
+    else:
+        res = mpcurvefitglobal(ngaussmodel if fit_model else nbinnedmodel, wave, 
+                     spec, weights, gpars, parinfo=ctx.parinfo, itmax=200,
                      quiet=not state.debug, spec=spec_model)
     if res.errmsg:
         _log_fit_error(state, res.errmsg)
