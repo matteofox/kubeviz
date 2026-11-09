@@ -1,4 +1,4 @@
-# Nathanael Pichette Cubeviz Contribution
+# Nathanael Pichette Kubeviz Contribution
 
 **NOTE: Updates to base Kubeviz made on October 27, 2026**
 
