@@ -33,11 +33,15 @@ ERR_METHOD_NAMES = {
     ERR_MC3: "MonteCarlo 3",
 }
 
-# Fit types (state.linefit_type) and modes (state.linefit_mode)
+# Fit types (state.linefit_type), modes (state.linefit_mode), models (state.linefit_model), and methods (state.linefit_method)
 FIT_GAUSS = 0
 FIT_MOMENTS = 1
 MODE_SPAXEL = 0
 MODE_MASK = 1
+FIT_STD = 0
+FIT_BINNED = 1
+FIT_LOCAL = 0
+FIT_GLOBAL = 1
 
 # Spectrum extraction modes (state.specmode)
 SPEC_SLICE = 0

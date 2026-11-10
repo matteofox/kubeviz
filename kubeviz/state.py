@@ -18,7 +18,7 @@ from . import __version__
 from .constants import (CKMS, ERR_BOOTSTRAP, ERR_MC1, ERR_MC2, ERR_MC3, ERR_NOISE,
                         FIT_GAUSS, INSTRRES_EXTPOLY, INSTRRES_TEMPLATE, INSTRRES_VARPOLY,
                         MAX_POLYCOEFF_INSTRRES, MAXLINES, MODE_MASK, MODE_SPAXEL,
-                        MONTECARLO_PERCS, NOT_FIT, SIGTOFWHM)
+                        MONTECARLO_PERCS, NOT_FIT, SIGTOFWHM, FIT_STD, FIT_LOCAL)
 from .linesdb import airtovac, mainline_rest
 from .results import ResultSet
 
@@ -213,6 +213,8 @@ class State:
     selected_lineset: int = 0
     linefit_mode: int = MODE_SPAXEL
     linefit_type: int = FIT_GAUSS
+    linefit_model: int = FIT_STD
+    linefit_method: int = FIT_LOCAL
     mom_windowmap: Optional[np.ndarray] = None          # (2, Nrow, Ncol)
     gauss_initmap: Optional[np.ndarray] = None          # (Nplanes, Nrow, Ncol)
     mom_windowmap_bootstrap: Optional[list] = None      # list of (2, Nrow, Ncol) or None

@@ -158,6 +158,7 @@ kubeviz is developed by
 
 Contributors:
 
+* Nathanael Pichette
 * *(add your name with your first pull request)*
 
 The original IDL kubeviz was written by David J. Wilman, Matteo Fossati and Joris Gerssen,

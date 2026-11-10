@@ -1,0 +1,19 @@
+# Nathanael Pichette Kubeviz Contribution, November 10, 2026
+
+**NOTE: Changes add the additional python modules Numdifftools and Regions to the engine**
+
+New additions
+
+1. Fixed bug preventing setting the input datafile with the interactive gui
+
+2. Updated line spread polynomial coefficients for MUSE
+
+**NOTE: The following additions are currently only available in the gui**
+
+3. Added binned fit Gaussian model option
+   
+4. Added global dual_annealing fit method option
+
+5. Added binmap(.csv or.fits) and ds9 region handling (.reg, requires image coordinates) as masks 
+
+6. Added region handling for setting the "FITALL range"

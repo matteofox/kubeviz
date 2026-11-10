@@ -22,7 +22,8 @@ import re
 from dataclasses import dataclass, field
 
 import numpy as np
-from scipy.optimize import least_squares
+from scipy.optimize import least_squares, dual_annealing
+from numdifftools import Hessian
 
 
 @dataclass
@@ -177,6 +178,125 @@ def mpcurvefit(func, x, y, weights, p0, parinfo=None, itmax: int = 200, quiet: b
     yfit[good] = yfit_g
     return MpfitResult(p, perror, chisq, dof, status, errmsg, int(res.nfev), yfit, covar)
 
+
+def mpcurvefitglobal(func, x, y, weights, p0, parinfo=None, itmax: int = 200, quiet: bool = True,
+               **kwargs) -> MpfitResult:
+    """Weighted dual-annealing fit of ``func(x, p, **kwargs)`` to ``y``.
+
+    ``weights`` are inverse variances (mpcurvefit convention); pixels with zero weight
+    are ignored. Returns an :class:`MpfitResult`.
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    p0 = np.array(p0, dtype=float)
+    npar = p0.size
+    if weights is None:
+        weights = np.ones_like(y)
+    weights = np.asarray(weights, dtype=float)
+    if parinfo is None:
+        parinfo = [ParInfo() for _ in range(npar)]
+    tied = [_compile_tied(pi.tied) for pi in parinfo]
+    free = np.array([pi.is_free for pi in parinfo], dtype=bool)
+    ifree = np.flatnonzero(free)
+    nfree = ifree.size
+
+    good = np.isfinite(y) & np.isfinite(weights) & (weights > 0) & np.isfinite(x)
+    xg, yg, sw = x[good], y[good], np.sqrt(weights[good])
+    npts = xg.size
+
+    #Replace infinite bounds with large numbers for use with dual annealing
+    lower = np.array([pi.limits[0] if pi.limited[0] else -np.inf for pi in parinfo])[ifree]
+    upper = np.array([pi.limits[1] if pi.limited[1] else np.inf for pi in parinfo])[ifree]
+
+    def expand(pf):
+        p = p0.copy()
+        p[ifree] = pf
+        for i, t in enumerate(tied):
+            if t is not None:
+                p[i] = t(p)
+        return p
+
+    def model(p):
+        return func(xg, p, **kwargs)
+
+    if npts == 0 or npts < nfree:
+        return MpfitResult(np.full(npar, -999.0), np.full(npar, -999.0), 0.0, 0, 0,
+                           "mpfit: number of parameters exceeds number of data points", 0, None)
+
+    if nfree == 0:
+        p = expand(np.zeros(0))
+        yfit = model(p)
+        chisq = float(np.sum((sw * (yg - yfit)) ** 2))
+        full = np.full(x.shape, np.nan)
+        full[good] = yfit
+        return MpfitResult(p, np.zeros(npar), chisq, npts, 1, "", 0, full)
+
+    start = np.clip(p0[ifree], lower, upper)
+    # avoid starting exactly on a bound where the reflective method has no room to move
+    span = np.where(np.isfinite(upper - lower), upper - lower, 1.0)
+    eps = 1e-8 * np.maximum(np.abs(start), 1.0)
+    at_lo = np.isfinite(lower) & (start <= lower)
+    at_hi = np.isfinite(upper) & (start >= upper)
+    start = np.where(at_lo, lower + np.minimum(eps, 0.5 * span), start)
+    start = np.where(at_hi, upper - np.minimum(eps, 0.5 * span), start)
+
+    def resid(pf):
+        r = sw * (yg - model(expand(pf)))**2
+        return np.sum(r)
+
+    errmsg = ""
+    #Setup bounds for dual-annealing format (finite and in (low,high) pairs)
+    bounds=[]
+    for i in range(len(lower)):
+        if not np.isfinite(lower[i]):
+            lowerfin=-1e30
+        else:
+            lowerfin=lower[i]
+        if not np.isfinite(upper[i]):
+            upperfin=1e30
+        else:
+            upperfin=upper[i]
+        bounds.append((lowerfin,upperfin))
+    
+    try:
+        res = dual_annealing(resid, x0=start, bounds=bounds,maxiter=1000,
+                             minimizer_kwargs={'method': 'L-BFGS-B','bounds': bounds})
+                            
+    except Exception as exc:  # pragma: no cover - numerical failure path
+        return MpfitResult(np.full(npar, -999.0), np.full(npar, -999.0), 0.0, 0, 0,
+                           f"mpfit failed: {exc}", 0, None)
+
+    p = expand(res.x)
+    yfit_g = model(p)
+    chisq = float(np.sum((sw * (yg - yfit_g)) ** 2))
+    dof = max(npts - nfree, 1)
+    perror = np.zeros(npar)
+    covar = None
+    # mpfit convention: parameters pegged at a limit are excluded from the covariance
+    # and get a zero error (their derivative is meaningless at the bound)
+    tol = 1e-9 * np.maximum(np.abs(res.x), 1.0)
+    pegged = (np.isfinite(lower) & (res.x <= lower + tol)) | (np.isfinite(upper) & (res.x >= upper - tol))
+    unpegged = np.flatnonzero(~pegged)
+    # Hessian error calculation; dual_annealing does not return a Jacobian or Hessian for error calculation
+    try:
+        H = Hessian(resid, method='central')(res.x)
+        H_free = H[:,unpegged].copy()
+        H_free = H_free[unpegged,:]
+        red_chi_sq = (res.fun) / (len(x)-nfree)
+        cov_free = np.linalg.pinv(H_free) * red_chi_sq
+        perror[ifree[unpegged]] = np.sqrt(np.abs(np.diag(cov_free)))
+        covar = np.zeros((npar, npar))
+        covar[np.ix_(ifree[unpegged], ifree[unpegged])] = cov_free
+    except Exception:  # pragma: no cover
+        perror[ifree] = 0.0
+    if not np.all(np.isfinite(p)):
+        errmsg = "mpfit: non-finite parameters"
+    status = int(res.status) if res.status != 0 else 0
+    if res.status != 0:
+        errmsg = errmsg or f"mpfit: minimisation did not converge ({res.message})"
+    yfit = np.full(x.shape, np.nan)
+    yfit[good] = yfit_g
+    return MpfitResult(p, perror, chisq, dof, status, errmsg, int(res.nfev), yfit, covar)
 
 # ----------------------------------------------------------------------------- peak fitting
 def _gauss_terms(x, p, nterms):
