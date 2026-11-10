@@ -1,6 +1,4 @@
-# Nathanael Pichette Kubeviz Contribution
-
-**NOTE: Updates to base Kubeviz made on October 27, 2026**
+# Nathanael Pichette Kubeviz Contribution, November 10, 2026
 
 **NOTE: Changes add the additional python modules Numdifftools and Regions to the engine**
 
